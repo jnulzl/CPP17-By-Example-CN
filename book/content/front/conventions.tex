@@ -1,0 +1,36 @@
+% 约定说明（原书 Conventions used）
+\section*{本书中使用的约定}
+
+本书使用了若干文本约定。
+
+\texttt{CodeInText}：表示正文中的代码字词。例如：「我们继续看一个类层次结构，其中 \texttt{Person} 是基类，\texttt{Student} 与 \texttt{Employee} 是它的派生类：」
+
+代码块按如下方式排版：
+
+\begin{codebox}
+class Person {
+   public:
+     Person(string name);
+     virtual void print();
+   private:
+     string m_name;
+};
+\end{codebox}
+
+当我们希望你注意代码块中的特定部分时，相关的行或条目会以加粗显示（原书中 \texttt{print} 一行为加粗等字体；本译稿统一以正体呈现）：
+
+\begin{codebox}
+class Person {
+   public:
+     Person(string name);
+     virtual void print();
+   private:
+     string m_name;
+};
+\end{codebox}
+
+\textbf{Bold}：表示新术语、重要词语，或者你在屏幕上看到的字词。例如，菜单或对话框中的词语在正文中显示如下：「在第一个对话框中，我们只需按下 Next 按钮。」
+
+重要提示或注意事项以此样式出现。
+
+提示与技巧以此样式出现。

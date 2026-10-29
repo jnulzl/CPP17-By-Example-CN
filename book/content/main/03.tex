@@ -1,0 +1,1312 @@
+% 第 3 章 构建图书馆管理系统
+\renewcommand{\codeInset}{18bp}
+本章我们研究一个图书馆管理系统。与前面几章一样，我们继续开发 C++ 类。不过，本章要开发的是一个更接近真实世界的系统。本章的图书馆系统可以供真实的图书馆使用。图书馆由一组图书和一组读者构成。图书记录哪些读者借阅或预约了它们，读者则记录自己借阅和预约了哪些图书。
+
+基本思想是：图书馆保存一组图书和一组读者。每本书都标记为已借出或未借出；如果已借出，就会存放借阅该书的读者的身份编号（identity number）。此外，一本书还可以被一个或多个读者预约，因此每本书还保存一份预约该书的读者编号列表。它必须是列表而不是集合，因为图书要按照读者预约的先后顺序依次借给这些读者。
+
+每位读者保存两个集合，分别存放他们已借阅和已预约图书的编号。这两种情况下我们都使用集合（set）而不是列表（list），因为借阅或预约图书的先后顺序并不重要。
+
+本章将涵盖以下主题：
+
+\begin{itemize}
+\item 使用由图书和读者构成的类，它们组成一个以整数编号为键的小型数据库。
+\item 使用标准输入输出流：我们写出图书和读者的信息，并提示用户进行输入。
+\item 使用文件处理与流。图书和读者通过标准 C++ 文件流写出和读入。
+\item 最后，我们使用 C++ 标准库中泛型的集合、映射（map）与列表类。
+\end{itemize}
+
+\section{Book 类}
+
+我们有三个类：Book、Customer 和 Library：
+
+\begin{itemize}
+\item \texttt{Book} 类记录一本书的信息。每本书都有作者和书名，以及一个唯一的编号。
+\item \texttt{Customer} 类记录一位读者的信息。每位读者都有名字和地址，以及一个唯一的编号。
+\item \texttt{Library} 类负责图书馆的各项操作，比如添加和删除图书与读者、借出、归还和预约图书，以及列出图书和读者。
+\end{itemize}
+
+\texttt{main} 函数只是创建一个 \texttt{Library} 类的对象。
+
+此外，每本书都保存着当前是否被借出的信息；如果被借出，还会存放借阅该书的读者的编号。每本书还保存一份预约列表。同样，每位读者保存着当前借阅和预约图书的集合。
+
+\texttt{Book} 类有两个构造函数。第一个是默认构造函数，用于从文件读取图书；第二个用于向图书馆添加新书，它以作者的名字和书名作为参数。
+
+\medskip\noindent{\ttfamily\bfseries Book.h}
+
+\begin{codebox}
+class Book {
+  public:
+    Book(void);
+    Book(const string& author, const string& title);
+\end{codebox}
+
+\texttt{author} 和 \texttt{title} 方法只是返回图书的作者和书名：
+
+\begin{codebox}
+    const string& author(void) const { return m_author; }
+    const string& title(void) const { return m_title; }
+\end{codebox}
+
+图书馆的图书可以写入文件，也可以从文件读回：
+
+\begin{codebox}
+    void read(ifstream& inStream);
+    void write(ofstream& outStream) const;
+\end{codebox}
+
+一本书可以被借出、预约或归还，预约也可以被取消。注意，图书被借出或预约时，我们需要提供读者的编号；而归还图书时则不需要，因为 \texttt{Book} 类自己记录着当前借阅该书的读者：
+
+\begin{codebox}
+    void borrowBook(int customerId);
+    int reserveBook(int customerId);
+    void unreserveBookation(int customerId);
+    void returnBook();
+\end{codebox}
+
+图书被借出时，会存放借阅该书的读者的编号；\texttt{bookId} 返回图书自身的编号：
+
+\begin{codebox}
+    int bookId(void) const { return m_bookId; }
+\end{codebox}
+
+\texttt{borrowed} 方法在图书当前被借出时返回 \texttt{true}。此时，\texttt{customerId} 返回借阅该书的读者的编号：
+
+\begin{codebox}
+    bool borrowed(void) const { return m_borrowed; }
+    int customerId(void) const { return m_customerId; }
+\end{codebox}
+
+一本书可以被一列读者预约，\texttt{reservationList} 返回这份预约列表：
+
+\begin{codebox}
+    list<int>& reservationList(void) { return m_reservationList; }
+\end{codebox}
+
+\texttt{MaxBookId} 字段是静态的，也就是说它为该类的所有对象所共有：
+
+\begin{codebox}
+    static int MaxBookId;
+\end{codebox}
+
+输出流运算符写出图书的信息：
+
+\begin{codebox}
+    friend ostream& operator<<(ostream& outStream,
+                               const Book& book);
+\end{codebox}
+
+图书被借出时，\texttt{m\_borrowed} 字段为 \texttt{true}。图书的编号和可能的借阅者存放在 \texttt{m\_bookId} 和 \texttt{m\_customerId} 中：
+
+\begin{codebox}
+    private:
+      bool m_borrowed = false;
+      int m_bookId, m_customerId;
+\end{codebox}
+
+图书的作者名和书名存放在 \texttt{m\_author} 和 \texttt{m\_title} 中：
+
+\begin{codebox}
+      string m_author, m_title;
+\end{codebox}
+
+不止一位读者可以预约同一本书。此时，他们的编号存放在 \texttt{m\_reservationList} 中。它是列表而不是集合，因为预约是按先后顺序存放的。当一本书被归还时，按预约顺序排在下一位的读者就会借到这本书：
+
+\begin{codebox}
+      list<int> m_reservationList;
+      };
+\end{codebox}
+
+本章我们使用 C++ 标准库中泛型的集合、映射与列表类。它们的声明存放在 Set、Map 和 List 头文件中。集合与列表类保存的集合和列表与上一章我们自己实现的类似。映射是这样一种结构：每个值都由一个唯一的键来标识，以便提供快速访问。
+
+\medskip\noindent{\ttfamily\bfseries Book.cpp}
+
+\begin{codebox}
+#include <Set>
+#include <Map>
+#include <List>
+#include <String>
+#include <FStream>
+using namespace std;
+
+#include "Book.h"
+#include "Customer.h"
+#include "Library.h"
+\end{codebox}
+
+由于 \texttt{MaxBookId} 是静态的，我们用双冒号（\texttt{::}）记法来初始化它。每个静态字段都需要在类定义之外初始化：
+
+\begin{codebox}
+int Book::MaxBookId = 0;
+\end{codebox}
+
+默认构造函数什么也不做。它用于从文件读取时。尽管如此，我们仍然必须有一个默认构造函数，才能创建 \texttt{Book} 类的对象：
+
+\begin{codebox}
+Book::Book(void) {
+  // Empty.
+}
+\end{codebox}
+
+创建一本新书时，会为它分配一个唯一的编号。该编号存放在 \texttt{MaxBookId} 中，每创建一个新 \texttt{Book} 对象它就加一：
+
+\begin{codebox}
+Book::Book(const string& author, const string& title)
+ :m_bookId(++MaxBookId),
+  m_author(author),
+  m_title(title) {
+  // Empty.
+}
+\end{codebox}
+
+\subsection{写入图书}
+
+图书以类似的方式写入流。不过这次不是 read 而是 write。它们的工作方式相似：
+
+\begin{codebox}
+void Book::write(ofstream& outStream) const {
+  outStream.write((char*) &m_bookId, sizeof m_bookId);
+\end{codebox}
+
+读取字符串时我们用 getline 而不是流运算符，因为流运算符只能读取一个单词，而 getline 能读取多个单词。不过写入流时，我们就可以用流运算符了，作者名和书名由一个还是多个单词都没有关系：
+
+\begin{codebox}
+  outStream << m_author << endl;
+  outStream << m_title << endl;
+
+  outStream.write((char*) &m_borrowed, sizeof m_borrowed);
+  outStream.write((char*) &m_customerId, sizeof m_customerId);
+\end{codebox}
+
+与读取时一样，我们先写入预约列表中预约的个数，然后再逐个写入预约者的编号：
+
+\begin{codebox}
+  { int reservationListSize = m_reservationList.size();
+    outStream.write((char*) &reservationListSize,
+                  sizeof reservationListSize);
+
+    for (int customerId : m_reservationList) {
+      outStream.write((char*) &customerId, sizeof customerId);
+    }
+  }
+}
+\end{codebox}
+
+\subsection{读取图书}
+
+从文件读取任何类型的值（字符串除外）时，我们都使用 read 方法，它读取固定数目的字节。\texttt{sizeof} 运算符给出 \texttt{m\_bookId} 字段以字节为单位的大小。\texttt{sizeof} 运算符也可以用来求某个类型的大小。例如，\texttt{sizeof(int)} 给出 \texttt{int} 类型值以字节为单位的大小。类型必须用圆括号括起来：
+
+\begin{codebox}
+void Book::read(ifstream& inStream) {
+  inStream.read((char*) &m_bookId, sizeof m_bookId);
+\end{codebox}
+
+从文件读取字符串值时，我们使用 C++ 标准函数 getline 来读取作者名和书名。如果名字由多个单词组成，使用输入流运算符是行不通的。如果作者名或书名由多个单词组成，只有第一个单词会被读入，其余的单词都不会被读取：
+
+\begin{codebox}
+  getline(inStream, m_author);
+  getline(inStream, m_title);
+\end{codebox}
+
+注意，\texttt{m\_borrowed} 字段的值我们也用 read 方法读取，尽管它存放的是 \texttt{bool} 类型而不是 \texttt{int}：
+
+\begin{codebox}
+  inStream.read((char*) &m_borrowed, sizeof m_borrowed);
+  inStream.read((char*) &m_customerId, sizeof m_customerId);
+\end{codebox}
+
+读取预约列表时，我们先读出列表中预约的个数，然后再读出各位预约者的编号：
+
+\begin{codebox}
+  { int reservationListSize;
+    inStream.read((char*) &reservationListSize,
+                sizeof reservationListSize);
+
+    for (int count = 0; count < reservationListSize; ++count) {
+      int customerId;
+      inStream.read((char*) &customerId, sizeof customerId);
+      m_reservationList.push_back(customerId);
+    }
+  }
+}
+\end{codebox}
+
+\subsection{图书的借出与预约}
+
+图书被借出时，\texttt{m\_borrowed} 变为 \texttt{true}，\texttt{m\_customerId} 被设置为借阅该书的读者的编号：
+
+\begin{codebox}
+void Book::borrowBook(int customerId) {
+  m_borrowed = true;
+  m_customerId = customerId;
+}
+\end{codebox}
+
+图书被预约时的情况稍有不同。虽然一本书一次只能被一位读者借阅，却可以被多位读者预约。读者的编号被加入 \texttt{m\_reservationList}。列表的大小会被返回，让调用者知道自己在预约列表中的位置：
+
+\begin{codebox}
+int Book::reserveBook(int customerId) {
+  m_reservationList.push_back(customerId);
+  return m_reservationList.size();
+}
+\end{codebox}
+
+图书被归还时，我们只是把 \texttt{m\_borrowed} 设为 \texttt{false}。不需要把 \texttt{m\_customerId} 设置成任何特定的值，只要图书未被借出，它就无关紧要：
+
+\begin{codebox}
+void Book::returnBook() {
+  m_borrowed = false;
+}
+\end{codebox}
+
+读者可以把自己从预约列表中移除。此时，我们对 \texttt{m\_reservationList} 调用 remove：
+
+\begin{codebox}
+void Book::unreserveBookation(int customerId) {
+  m_reservationList.remove(customerId);
+}
+\end{codebox}
+
+\subsection{显示图书}
+
+输出流运算符写出图书的书名和作者。如果图书被借出，就写出读者的名字；如果预约列表非空，就写出各位预约读者的名字：
+
+\begin{codebox}
+ostream& operator<<(ostream& outStream, const Book& book) {
+  outStream << "\"" << book.m_title << "\" by " << book.m_author;
+\end{codebox}
+
+访问静态字段（比如 Library 中的 \texttt{s\_customerMap}）时，我们使用双冒号（\texttt{::}）记法：
+
+\begin{codebox}
+  if (book.m_borrowed) {
+    outStream << endl << "  Borrowed by: "
+              << Library::s_customerMap[book.m_customerId].name()
+              << ".";
+  }
+
+  if (!book.m_reservationList.empty()) {
+    outStream << endl << "  Reserved by: ";
+    bool first = true;
+
+    for (int customerId : book.m_reservationList) {
+      outStream << (first ? "" : ",")
+                << Library::s_customerMap[customerId].name();
+      first = false;
+    }
+
+    outStream << ".";
+  }
+
+  return outStream;
+}
+\end{codebox}
+
+\section{Customer 类}
+
+\texttt{Customer} 类记录一位读者的信息。它保存着该读者当前借阅和预约图书的集合。
+
+\medskip\noindent{\ttfamily\bfseries Customer.h}
+
+\begin{codebox}
+class Customer {
+  public:
+    Customer(void);
+    Customer(const string& name, const string& address);
+
+    void read(ifstream& inStream);
+    void write(ofstream& outStream) const;
+
+    void borrowBook(int bookId);
+    void reserveBook(int bookId);
+    void returnBook(int bookId);
+    void unreserveBook(int bookId);
+\end{codebox}
+
+\texttt{hasBorrowed} 方法在该读者当前至少借有一本书时返回 \texttt{true}。在下一节的 \texttt{Library} 类中，当前借有图书的读者是无法被删除的：
+
+\begin{codebox}
+    bool hasBorrowed(void) const { return !m_loanSet.empty(); }
+
+    const string& name(void) const {return m_name;}
+    const string& address(void) const {return m_address;}
+    int id(void) const {return m_customerId;}
+\end{codebox}
+
+与前面用过的 \texttt{Book} 类一样，我们使用静态字段 \texttt{MaxCustomerId} 来统计读者的编号。我们还使用输出流运算符写出读者的信息：
+
+\begin{codebox}
+    static int MaxCustomerId;
+    friend ostream& operator<<(ostream& outStream,
+                               const Customer& customer);
+\end{codebox}
+
+每位读者都有名字、地址和一个唯一的编号。集合 \texttt{m\_loanSet} 和 \texttt{m\_reservationSet} 存放着该读者当前借阅和预约的图书的编号。注意，我们使用集合而不是列表，因为借阅和预约图书的先后顺序并不重要：
+
+\begin{codebox}
+    private:
+      int m_customerId;
+      string m_name, m_address;
+      set<int> m_loanSet, m_reservationSet;
+  };
+\end{codebox}
+
+\medskip\noindent{\ttfamily\bfseries Customer.cpp}
+
+\begin{codebox}
+#include <Set>
+#include <Map>
+#include <List>
+#include <String>
+#include <FStream>
+using namespace std;
+
+#include "Book.h"
+#include "Customer.h"
+#include "Library.h"
+\end{codebox}
+
+由于 \texttt{MaxCustomerId} 是静态字段，它需要在类之外定义：
+
+\begin{codebox}
+int Customer::MaxCustomerId;
+\end{codebox}
+
+默认构造函数只在从文件加载对象时使用，因此不需要对字段进行初始化：
+
+\begin{codebox}
+Customer::Customer(void) {
+  // Empty.
+}
+\end{codebox}
+
+第二个构造函数用于创建新的读者对象。我们用 \texttt{MaxCustomerId} 字段来初始化读者的编号，同时还初始化读者的名字和地址：
+
+\begin{codebox}
+Customer::Customer(const string& name, const string& address)
+ :m_customerId(++MaxCustomerId),
+  m_name(name),
+  m_address(address) {
+  // Empty.
+}
+\end{codebox}
+
+\subsection{从文件读取读者}
+
+read 方法从文件流中读取一位读者的信息：
+
+\begin{codebox}
+void Customer::read(ifstream& inStream) {
+  inStream.read((char*) &m_customerId, sizeof m_customerId);
+\end{codebox}
+
+与 \texttt{Book} 类的 read 方法一样，我们必须使用 getline 函数而不是输入流运算符，因为输入流运算符只会读入一个单词：
+
+\begin{codebox}
+  getline(inStream, m_name);
+  getline(inStream, m_address);
+
+  { int loanSetSize;
+    inStream.read((char*) &loanSetSize, sizeof loanSetSize);
+
+    for (int count = 0; count < loanSetSize; ++count) {
+      int bookId;
+      inStream.read((char*) &bookId, sizeof bookId);
+      m_loanSet.insert(bookId);
+    }
+  }
+
+  { int reservationListSize;
+    inStream.read((char*) &reservationListSize,
+                sizeof reservationListSize);
+
+    for (int count = 0; count < reservationListSize; ++count) {
+      int bookId;
+      inStream.read((char*) &bookId, sizeof bookId);
+      m_loanSet.insert(bookId);
+    }
+  }
+}
+\end{codebox}
+
+\subsection{将读者写入文件}
+
+write 方法以与前面 \texttt{Book} 类相同的方式把读者的信息写入流：
+
+\begin{codebox}
+void Customer::write(ofstream& outStream) const {
+  outStream.write((char*) &m_customerId, sizeof m_customerId);
+
+  outStream << m_name << endl;
+  outStream << m_address << endl;
+\end{codebox}
+
+写入集合时，我们先写入集合的大小，然后再逐个写入集合中的各个值：
+
+\begin{codebox}
+  { int loanSetSize = m_loanSet.size();
+    outStream.write((char*) &loanSetSize, sizeof loanSetSize);
+
+    for (int bookId : m_loanSet) {
+      outStream.write((char*) &bookId, sizeof bookId);
+    }
+  }
+
+  { int reservationListSize = m_reservationSet.size();
+    outStream.write((char*) &reservationListSize,
+                  sizeof reservationListSize);
+
+    for (int bookId : m_reservationSet) {
+      outStream.write((char*) &bookId, sizeof bookId);
+    }
+  }
+}
+\end{codebox}
+
+\subsection{读者借阅与预约图书}
+
+读者借阅一本书时，这本书被插入该读者的借阅集合：
+
+\begin{codebox}
+void Customer::borrowBook(int bookId) {
+  m_loanSet.insert(bookId);
+}
+\end{codebox}
+
+同样，读者预约一本书时，这本书被插入该读者的预约集合：
+
+\begin{codebox}
+void Customer::reserveBook(int bookId) {
+  m_reservationSet.insert(bookId);
+}
+\end{codebox}
+
+读者归还或取消预约一本书时，这本书就从借阅集合或预约集合中移除：
+
+\begin{codebox}
+void Customer::returnBook(int bookId) {
+  m_loanSet.erase(bookId);
+}
+
+void Customer::unreserveBook(int bookId) {
+  m_reservationSet.erase(bookId);
+}
+\end{codebox}
+
+\subsection{显示读者}
+
+输出流运算符写出读者的名字和地址。如果读者借阅或预约了图书，这些图书也会被写出：
+
+\begin{codebox}
+ostream& operator<<(ostream& outStream, const Customer& customer){
+  outStream << customer.m_customerId << ". " << customer.m_name
+            << ", " << customer.m_address << ".";
+
+  if (!customer.m_loanSet.empty()) {
+    outStream << endl << "  Borrowed books: ";
+
+    bool first = true;
+    for (int bookId : customer.m_loanSet) {
+      outStream << (first ? "" : ",")
+                << Library::s_bookMap[bookId].author();
+      first = false;
+    }
+ }
+
+  if (!customer.m_reservationSet.empty()) {
+    outStream << endl << "  Reserved books: ";
+
+    bool first = true;
+    for (int bookId : customer.m_reservationSet) {
+      outStream << (first ? "" : ",")
+                << Library::s_bookMap[bookId].title();
+      first = false;
+    }
+  }
+
+  return outStream;
+}
+\end{codebox}
+
+\section{Library 类}
+
+最后，\texttt{Library} 类负责处理图书馆本身。它围绕借出和归还图书执行一系列任务。
+
+\medskip\noindent{\ttfamily\bfseries Library.h}
+
+\begin{codebox}
+class Library {
+  public:
+    Library();
+  private:
+    static string s_binaryPath;
+\end{codebox}
+
+\texttt{lookupBook} 方法按作者和书名查找一本书。如果找到，它返回 \texttt{true}；此时该书的信息（一个 \texttt{Book} 类的对象）会被复制到 \texttt{bookPtr} 所指的对象中：
+
+\begin{codebox}
+    bool lookupBook(const string& author, const string& title,
+                    Book* bookPtr = nullptr);
+\end{codebox}
+
+同样，\texttt{lookupCustomer} 按名字和地址查找一位读者。如果找到该读者，就返回 \texttt{true}，并把信息复制到 \texttt{customerPtr} 所指的对象中：
+
+\begin{codebox}
+    bool lookupCustomer(const string& name, const string& address,
+                        Customer* customerPtr = nullptr);
+\end{codebox}
+
+本章的应用程序围绕下面这些方法展开。它们执行图书馆系统的各项任务。每个方法都会提示用户进行输入，然后执行一项任务，比如借出或归还一本书。
+
+下面的方法各自执行一项任务，即查找图书或读者的信息、添加或删除图书、列出图书、在图书馆中添加和删除图书，以及借出、预约和归还图书：
+
+\begin{codebox}
+    void addBook(void);
+    void deleteBook(void);
+    void listBooks(void);
+    void addCustomer(void);
+    void deleteCustomer(void);
+    void listCustomers(void);
+    void borrowBook(void);
+    void reserveBook(void);
+    void returnBook(void);
+\end{codebox}
+
+load 和 save 方法分别在执行的开始和结束时被调用：
+
+\begin{codebox}
+    void load();
+    void save();
+\end{codebox}
+
+有两个映射分别保存图书馆的图书和读者。如前所述，映射是这样一种结构：每个值都由一个唯一的键来标识，以便提供快速访问。图书和读者的唯一编号就是键：
+
+\begin{codebox}
+  public:
+    static map<int,Book> s_bookMap;
+    static map<int,Customer> s_customerMap;
+};
+\end{codebox}
+
+\medskip\noindent{\ttfamily\bfseries Library.cpp}
+
+\begin{codebox}
+#include <Set>
+#include <Map>
+#include <List>
+#include <String>
+#include <FStream>
+#include <IOStream>
+#include <Algorithm>
+using namespace std;
+
+#include "Book.h"
+#include "Customer.h"
+#include "Library.h"
+
+map<int,Book> Library::s_bookMap;
+map<int,Customer> Library::s_customerMap;
+\end{codebox}
+
+两次执行之间，图书馆的信息存放在硬盘上的 Library.bin 文件中。注意，字符串中我们用两个反斜线表示一个反斜线：第一个反斜线表明后面的字符是特殊字符，第二个反斜线则表明它就是一个反斜线：
+
+\begin{codebox}
+string Library::s_binaryPath("Library.bin");
+\end{codebox}
+
+构造函数加载图书馆的信息，显示一个菜单，然后不断循环，直到用户退出。在执行结束之前，图书馆的信息会被保存：
+
+\begin{codebox}
+Library::Library(void) {
+\end{codebox}
+
+在显示菜单之前，先从文件加载图书馆的信息（图书、读者、借阅和预约）：
+
+\begin{codebox}
+  load();
+\end{codebox}
+
+只要 quit 不为 \texttt{true}，while 语句就会一直循环下去。直到用户从菜单中选择 Quit 选项，它才会变成 \texttt{true}：
+
+\begin{codebox}
+  bool quit = false;
+  while (!quit) {
+    cout << "1. Add Book" << endl
+         << "2. Delete Book" << endl
+         << "3. List Books" << endl
+         << "4. Add Customer" << endl
+         << "5. Delete Customer" << endl
+         << "6. List Customers" << endl
+         << "7. Borrow Book" << endl
+         << "8. Reserve Book" << endl
+         << "9. Return Book" << endl
+         << "0. Quit" << endl
+         << ": ";
+\end{codebox}
+
+用户从控制台输入流（\texttt{cin}）输入一个整数值，它存放在 \texttt{choice} 中：
+
+\begin{codebox}
+    int choice;
+    cin >> choice;
+\end{codebox}
+
+我们用 switch 语句来执行所请求的任务：
+
+\begin{codebox}
+    switch (choice) {
+      case 1:
+        addBook();
+        break;
+
+      case 2:
+        deleteBook();
+        break;
+
+      case 3:
+        listBooks();
+        break;
+
+      case 4:
+        addCustomer();
+        break;
+
+      case 5:
+        deleteCustomer();
+        break;
+
+      case 6:
+        listCustomers();
+        break;
+
+      case 7:
+        borrowBook();
+        break;
+
+      case 8:
+        reserveBook();
+        break;
+
+      case 9:
+        returnBook();
+        break;
+
+      case 0:
+        quit = true;
+        break;
+    }
+
+    cout << endl;
+  }
+\end{codebox}
+
+在程序结束之前，图书馆的信息会被保存：
+
+\begin{codebox}
+    save();
+}
+\end{codebox}
+
+\subsection{查找图书与读者}
+
+\texttt{lookupBook} 方法遍历图书映射。如果存在指定作者和书名的图书，它返回 \texttt{true}。如果该书存在，只要指针不为空，就把它的信息复制到 \texttt{bookPtr} 参数所指的对象中并返回 \texttt{true}。如果该书不存在，就返回 \texttt{false}，并且不向对象复制任何信息：
+
+\begin{codebox}
+bool Library::lookupBook(const string& author,
+        const string& title, Book* bookPtr /* = nullptr*/) {
+  for (const pair<int,Book>& entry : s_bookMap) {
+    const Book& book = entry.second;
+\end{codebox}
+
+注意，\texttt{bookPtr} 可能是 \texttt{nullptr}。此时只返回 \texttt{true}，不向 \texttt{bookPtr} 所指的对象写入任何信息：
+
+\begin{codebox}
+    if ((book.author() == author) && (book.title() == title)) {
+      if (bookPtr != nullptr) {
+        *bookPtr = book;
+      }
+
+      return true;
+    }
+  }
+
+  return false;
+}
+\end{codebox}
+
+同样，\texttt{lookupCustomer} 遍历读者映射；如果存在指定名字的读者，它返回 \texttt{true}，并把读者信息复制到一个 \texttt{Customer} 对象中：
+
+\begin{codebox}
+bool Library::lookupCustomer(const string& name,
+       const string& address, Customer* customerPtr /*=nullptr*/){
+  for (const pair<int,Customer>& entry : s_customerMap) {
+    const Customer& customer = entry.second;
+\end{codebox}
+
+同样，在这种情况下，\texttt{customerPtr} 也可能是 \texttt{nullptr}。此时只返回 \texttt{true}。添加新读者时，我们想知道是否已经存在同名同地址的读者：
+
+\begin{codebox}
+    if ((customer.name() == name) &&
+        (customer.address() == address)) {
+      if (customerPtr != nullptr) {
+        *customerPtr = customer;
+      }
+
+      return true;
+    }
+  }
+
+  return false;
+}
+\end{codebox}
+
+\subsection{添加图书}
+
+\texttt{addBook} 方法提示用户输入新书的作者名和书名：
+
+\begin{codebox}
+void Library::addBook(void) {
+  string author;
+  cout << "Author: ";
+  cin >> author;
+
+  string title;
+  cout << "Title: ";
+  cin >> title;
+\end{codebox}
+
+如果指定作者和书名的图书已经存在，就显示一条错误消息：
+
+\begin{codebox}
+  if (lookupBook(author, title)) {
+    cout << endl << "The book \"" << title << "\" by "
+         << author << " already exists." << endl;
+    return;
+  }
+\end{codebox}
+
+如果该书尚不存在，我们就创建一个新的 \texttt{Book} 对象，并把它加入图书映射：
+
+\begin{codebox}
+  Book book(author, title);
+  s_bookMap[book.bookId()] = book;
+  cout << endl << "Added: " << book << endl;
+}
+\end{codebox}
+
+\subsection{删除图书}
+
+\texttt{deleteBook} 方法提示用户输入图书的作者名和书名，如果该书存在就删除它：
+
+\begin{codebox}
+void Library::deleteBook() {
+  string author;
+  cout << "Author: ";
+  cin >> author;
+
+  string title;
+  cout << "Title: ";
+  cin >> title;
+\end{codebox}
+
+如果该书不存在，就显示一条错误消息：
+
+\begin{codebox}
+  Book book;
+  if (!lookupBook(author, title, &book)) {
+    cout << endl << "There is no book \"" << title << "\" by "
+         << "author " << author << "." << endl;
+    return;
+  }
+\end{codebox}
+
+删除一本书时，我们遍历所有读者，并对每位读者归还并取消预约这本书。我们对每一本书都这样做，以防该书已被读者借出或预约。在下一章中，我们将使用指针，让我们能够以更高效的方式归还和取消预约图书。
+
+注意，当我们遍历映射并获取每个 \texttt{Customer} 对象后，需要在修改其字段值之后把它放回映射中：
+
+\begin{codebox}
+  for (pair<int,Customer> entry : s_customerMap) {
+    Customer& customer = entry.second;
+    customer.returnBook(book.bookId());
+    customer.unreserveBook(book.bookId());
+    s_customerMap[customer.id()] = customer;
+  }
+\end{codebox}
+
+最后，在确认图书存在、并且已经归还和取消预约之后，我们把它从图书映射中移除：
+
+\begin{codebox}
+  s_bookMap.erase(book.bookId());
+  cout << endl << "Deleted." << endl;
+}
+\end{codebox}
+
+\subsection{列出图书}
+
+\texttt{listBooks} 方法相当简单。首先，我们检查图书映射是否为空。如果为空，就写出「No books.」；如果不为空，就遍历该映射，对每一本书都把它的信息写到控制台输出流（\texttt{cout}）：
+
+\begin{codebox}
+void Library::listBooks(void) {
+  if (s_bookMap.empty()) {
+    cout << "No books." << endl;
+    return;
+  }
+
+  for (const pair<int,Book>& entry : s_bookMap) {
+    const Book& book = entry.second;
+    cout << book << endl;
+  }
+}
+\end{codebox}
+
+\subsection{添加读者}
+
+\texttt{addCustomer} 方法提示用户输入新读者的名字和地址：
+
+\begin{codebox}
+void Library::addCustomer(void) {
+  string name;
+  cout << "Name: ";
+  cin >> name;
+
+  string address;
+  cout << "Address: ";
+  cin >> address;
+\end{codebox}
+
+如果同名同地址的读者已经存在，就显示一条错误消息：
+
+\begin{codebox}
+  if (lookupCustomer(name, address)) {
+    cout << endl << "A customer with name " << name
+         << " and address " << address << " already exists."
+         << endl;
+    return;
+  }
+\end{codebox}
+
+最后，我们创建一个新的 \texttt{Customer} 对象，并把它加入读者映射：
+
+\begin{codebox}
+  Customer customer(name, address);
+  s_customerMap[customer.id()] = customer;
+  cout << endl << "Added." << endl;
+}
+\end{codebox}
+
+\subsection{删除读者}
+
+\texttt{deleteCustomer} 方法删除指定的读者（如果存在）：
+
+\begin{codebox}
+void Library::deleteCustomer(void) {
+  string name;
+  cout << "Name: ";
+  cin >> name;
+
+  string address;
+  cout << "Address: ";
+  cin >> address;
+
+  Customer customer;
+  if (!lookupCustomer(name, address, &customer)) {
+    cout << endl << "There is no customer with name " << name
+         << " and address " << address << "." << endl;
+    return;
+  }
+\end{codebox}
+
+如果该读者至少借有一本书，必须先归还，才能删除该读者：
+
+\begin{codebox}
+  if (customer.hasBorrowed()) {
+    cout << "Customer " << name << " has borrowed at least "
+         << "one book and cannot be deleted." << endl;
+    return;
+  }
+\end{codebox}
+
+不过，如果该读者预约了图书，我们在删除读者之前只需取消这些预约：
+
+\begin{codebox}
+  for (pair<int,Book> entry : s_bookMap) {
+    Book& book = entry.second;
+    book.unreserveBookation(customer.id());
+    s_bookMap[book.bookId()] = book;
+  }
+
+  cout << endl << "Deleted." << endl;
+  s_customerMap.erase(customer.id());
+}
+\end{codebox}
+
+\subsection{列出读者}
+
+\texttt{listCustomers} 方法的工作方式与 \texttt{listBooks} 类似。如果没有读者，就写出「No customers.」；如果有读者，就把他们写到控制台输出流（\texttt{cout}）：
+
+\begin{codebox}
+void Library::listCustomers(void) {
+  if (s_customerMap.empty()) {
+    cout << "No customers." << endl;
+    return;
+  }
+
+  for (const pair<int,Customer>& entry : s_customerMap) {
+    const Customer& customer = entry.second;
+    cout << customer << endl;
+  }
+}
+\end{codebox}
+
+\subsection{借出图书}
+
+\texttt{borrowBook} 方法提示用户输入图书的作者名和书名：
+
+\begin{codebox}
+void Library::borrowBook(void) {
+  string author;
+  cout << "Author: ";
+  cin >> author;
+
+  string title;
+  cout << "Title: ";
+  cin >> title;
+\end{codebox}
+
+如果不存在指定作者和书名的图书，就显示一条错误消息：
+
+\begin{codebox}
+  Book book;
+  if (!lookupBook(author, title, &book)) {
+    cout << endl << "There is no book \"" << title << "\" by "
+         << "author " << author << "." << endl;
+    return;
+  }
+\end{codebox}
+
+此外，如果该书已经被借出，也显示一条错误消息：
+
+\begin{codebox}
+  if (book.borrowed()) {
+    cout << endl << "The book \"" << title << "\" by " << author
+         << " has already been borrowed." << endl;
+    return;
+  }
+\end{codebox}
+
+然后我们提示用户输入读者的名字和地址：
+
+\begin{codebox}
+  string name;
+  cout << "Customer name: ";
+  cin >> name;
+
+  string address;
+  cout << "Adddress: ";
+  cin >> address;
+\end{codebox}
+
+如果不存在指定名字和地址的读者，就显示一条错误消息：
+
+\begin{codebox}
+  Customer customer;
+  if (!lookupCustomer(name, address, &customer)) {
+    cout << endl << "There is no customer with name " << name
+         << " and address " << address << "." << endl;
+    return;
+  }
+\end{codebox}
+
+不过，如果图书存在且尚未被借出，而读者也存在，我们就把这本书加入该读者的借阅集合，并把该书标记为由该读者借出：
+
+\begin{codebox}
+  book.borrowBook(customer.id());
+  customer.borrowBook(book.bookId());
+\end{codebox}
+
+注意，修改 \texttt{Book} 和 \texttt{Customer} 对象之后，我们必须把它们放回各自的映射中。在下一章中，我们将使用一种更直接的指针处理方式：
+
+\begin{codebox}
+  s_bookMap[book.bookId()] = book;
+  s_customerMap[customer.id()] = customer;
+  cout << endl << "Borrowed." << endl;
+}
+\end{codebox}
+
+\subsection{预约图书}
+
+\texttt{reserveBook} 方法的工作方式与 \texttt{borrowBook} 相同。它提示用户输入图书的作者名和书名：
+
+\begin{codebox}
+void Library::reserveBook(void) {
+  string author;
+  cout << "Author: ";
+  cin >> author;
+
+  string title;
+  cout << "Title: ";
+  cin >> title;
+\end{codebox}
+
+与 \texttt{borrowBook} 的情况类似，我们检查指定作者和书名的图书是否存在：
+
+\begin{codebox}
+  Book book;
+  if (!lookupBook(author, title, &book)) {
+    cout << endl << "There is no book \"" << title << "\" by "
+         << "author " << author << "." << endl;
+    return;
+  }
+\end{codebox}
+
+不过，与 \texttt{borrowBook} 相比有一个不同之处：图书必须已经被借出，才能被预约。如果尚未借出，预约它毫无意义。在这种情况下，用户应该直接借阅这本书：
+
+\begin{codebox}
+  if (!book.borrowed()) {
+    cout << endl << "The book with author " << author
+         << " and title \"" << title << "\" has not been "
+         << "borrowed. Please borrow the book instead." << endl;
+    return;
+  }
+\end{codebox}
+
+如果图书存在且已被借出，我们就提示用户输入读者的名字和地址：
+
+\begin{codebox}
+  string name;
+  cout << "Customer name: ";
+  cin >> name;
+
+  string address;
+  cout << "Address: ";
+  cin >> address;
+\end{codebox}
+
+如果该读者不存在，就显示一条错误消息：
+
+\begin{codebox}
+  Customer customer;
+  if (!lookupCustomer(name, address, &customer)) {
+    cout << endl << "No customer with name " << name
+         << " and address " << address << " exists." << endl;
+    return;
+  }
+\end{codebox}
+
+此外，如果这本书已经由该读者借出，我们就显示一条错误消息：
+
+\begin{codebox}
+  if (book.customerId() == customer.id()) {
+    cout << endl << "The book has already been borrowed by "
+         << name << "." << endl;
+    return;
+  }
+\end{codebox}
+
+如果图书存在且已被借出、但借出者不是该读者，我们就把该读者加入这本书的预约列表，并把这本书加入该读者的预约集合：
+
+\begin{codebox}
+  customer.reserveBook(book.bookId());
+  int position = book.reserveBook(customer.id());
+\end{codebox}
+
+同样，在这种情况下，我们也必须把 \texttt{Book} 和 \texttt{Customer} 对象放回各自的映射中：
+
+\begin{codebox}
+  s_bookMap[book.bookId()] = book;
+  s_customerMap[customer.id()] = customer;
+\end{codebox}
+
+最后，我们写出该读者在预约列表中的位置：
+
+\begin{codebox}
+  cout << endl << position << "nd reserve." << endl;
+}
+\end{codebox}
+
+\subsection{归还图书}
+
+\texttt{returnBook} 方法提示用户输入图书的作者名和书名：
+
+\begin{codebox}
+void Library::returnBook(void) {
+  string author;
+  cout << "Author: ";
+  cin >> author;
+
+  string title;
+  cout << "Title: ";
+  cin >> title;
+\end{codebox}
+
+如果该书不存在，就显示一条错误消息：
+
+\begin{codebox}
+  Book book;
+  if (!lookupBook(author, title, &book)) {
+    cout << endl << "No book \"" << title
+         << "\" by " << author << " exists." << endl;
+    return;
+  }
+\end{codebox}
+
+如果该书尚未被借出，就显示一条错误消息：
+
+\begin{codebox}
+  if (!book.borrowed()) {
+    cout << endl << "The book \"" << title
+         << "\" by " << author
+         << "\" has not been borrowed." << endl;
+    return;
+  }
+\end{codebox}
+
+与前面描述的方法不同，这种情况我们不需要询问读者。我们直接归还这本书，然后在预约列表中查找下一位读者：
+
+\begin{codebox}
+  book.returnBook();
+  cout << endl << "Returned." << endl;
+
+  Customer customer = s_customerMap[book.customerId()];
+  customer.returnBook(book.bookId());
+  s_customerMap[customer.id()] = customer;
+\end{codebox}
+
+如果这本书已被预约，我们就找出预约列表中的第一位读者，把他们从预约列表中移除，并让他们借阅这本书：
+
+\begin{codebox}
+  list<int>& reservationList = book.reservationList();
+
+  if (!reservationList.empty()) {
+    int newCustomerId = reservationList.front();
+    reservationList.erase(reservationList.begin());
+    book.borrowBook(newCustomerId);
+
+    Customer newCustomer = s_customerMap[newCustomerId];
+    newCustomer.borrowBook(book.bookId());
+
+    s_customerMap[newCustomerId] = newCustomer;
+    cout << endl << "Borrowed by " << newCustomer.name() << endl;
+  }
+
+  s_bookMap[book.bookId()] = book;
+}
+\end{codebox}
+
+\subsection{将图书馆信息保存到文件}
+
+保存图书馆的信息时，我们首先打开文件：
+
+\begin{codebox}
+void Library::save() {
+  ofstream outStream(s_binaryPath);
+\end{codebox}
+
+如果文件被正确打开，我们先写出图书的数目，然后通过对 \texttt{Book} 对象调用 write 来写出每本书的信息：
+
+\begin{codebox}
+  if (outStream) {
+    int numberOfBooks = s_bookMap.size();
+    outStream.write((char*) &numberOfBooks, sizeof numberOfBooks);
+
+    for (const pair<int,Book>& entry : s_bookMap) {
+      const Book& book = entry.second;
+      book.write(outStream);
+    }
+\end{codebox}
+
+同样，我们写出读者的数目，然后通过调用 write 写出每位读者的信息：
+
+\begin{codebox}
+    int numberOfCustomers = s_customerMap.size();
+    outStream.write((char*) &numberOfCustomers,
+                  sizeof numberOfCustomers);
+
+    for (const pair<int,Customer>& entry : s_customerMap) {
+      const Customer& customer = entry.second;
+      customer.write(outStream);
+    }
+  }
+}
+\end{codebox}
+
+\subsection{从文件加载图书馆信息}
+
+从文件加载图书馆信息时，我们对 read 的使用方式也与前面相同。我们首先打开文件：
+
+\begin{codebox}
+void Library::load() {
+  ifstream inStream(s_binaryPath);
+\end{codebox}
+
+我们读出图书的数目，然后读出每本书的信息：
+
+\begin{codebox}
+  if (inStream) {
+    int numberOfBooks;
+    inStream.read((char*) &numberOfBooks, sizeof numberOfBooks);
+\end{codebox}
+
+对每本书，我们创建一个新的 \texttt{Book} 对象，通过调用 read 读出它的信息，并把它加入图书映射。我们还计算静态字段 \texttt{MaxBookId} 的新值，即把它设置为它自身与该书编号两者的最大值：
+
+\begin{codebox}
+    for (int count = 0; count < numberOfBooks; ++count) {
+      Book book;
+      book.read(inStream);
+      s_bookMap[book.bookId()] = book;
+      Book::MaxBookId = max(Book::MaxBookId, book.bookId());
+    }
+\end{codebox}
+
+同样，我们读出读者的数目，然后通过调用 read 读出每位读者的信息：
+
+\begin{codebox}
+    int numberOfCustomers;
+    inStream.read((char*) &numberOfCustomers,
+                sizeof numberOfCustomers);
+\end{codebox}
+
+对每位读者，我们创建一个 \texttt{Customer} 对象，从文件中读出它的信息，把它加入读者映射，并计算静态字段 \texttt{MaxCustomerId} 的新值：
+
+\begin{codebox}
+    for (int count = 0; count < numberOfCustomers; ++count) {
+      Customer customer;
+      customer.read(inStream);
+      s_customerMap[customer.id()] = customer;
+      Customer::MaxCustomerId =
+        max(Customer::MaxCustomerId, customer.id());
+    }
+  }
+}
+\end{codebox}
+
+\section{main 函数}
+
+最后，我们来编写执行这个图书馆的 \texttt{main} 函数。它非常简单；唯一要做的事情就是实例化一个 \texttt{Library} 类的对象。然后构造函数会显示主菜单：
+
+\medskip\noindent{\ttfamily\bfseries Main.cpp}
+
+\begin{codebox}
+#include <Set>
+#include <Map>
+#include <List>
+#include <String>
+#include <FStream>
+#include <IOStream>
+using namespace std;
+
+#include "Book.h"
+#include "Customer.h"
+#include "Library.h"
+
+void main(void) {
+  Library();
+}
+\end{codebox}
+
+\section{小结}
+
+本章我们构建了一个由 \texttt{Book}、\texttt{Customer} 和 \texttt{Library} 类组成的图书馆管理系统。
+
+\texttt{Book} 类保存一本书的信息。每个 \texttt{Book} 对象都持有一个唯一的编号。它还记录着借阅者（如果该书已被借出）以及一份预约列表。同样，\texttt{Customer} 类保存一位读者的信息。与图书一样，每位读者持有一个唯一的编号。每个 \texttt{Customer} 对象还保存着已借阅和已预约图书的集合。最后，\texttt{Library} 类提供一系列服务，比如添加和删除图书与读者、借出、归还和预约图书，以及列出图书和读者。
+
+本章中，每本书和每位读者都有一个唯一的编号。下一章我们将再次研究这个图书馆系统，不过我们会省去编号，改用指针来处理。

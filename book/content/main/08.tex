@@ -1,0 +1,1149 @@
+% 第 8 章 计算机对弈
+\renewcommand{\codeInset}{63bp}
+本章我们继续开发奥赛罗棋和圈叉棋这两个游戏。本章的新内容是计算机与人类对弈：不再是两名人类玩家互相对弈，而是由计算机与一个人对弈。
+
+本章将涵盖以下主题：
+
+\begin{itemize}
+\item 博弈推理。在两个游戏中，人类或计算机都可以先走，我们添加让计算机与人类对弈的代码。
+\item 在奥赛罗棋中，对每个走法，我们扫描棋盘，尝试找出能翻转最多人类棋子的走法。
+\item 在圈叉棋中，我们尝试找出棋盘中能形成最多连子的位置；或者，如果人类即将五子连珠，我们就必须把计算机的棋子放在能阻止这一情况发生的位置上。
+\item 随机数生成简介。如果计算机可以在若干等价走法之间进行选择，它将随机选择其中一个走法。
+\item 我们继续使用类、字段和方法等 C++ 特性，也继续使用窗口和部件等 Qt 特性。
+\end{itemize}
+
+\section{奥赛罗棋}
+
+在本章的奥赛罗棋应用程序中，我们复用上一章的 \texttt{MainWindow} 和 \texttt{GameWidget} 类。
+
+\subsection{OthelloWindow 类}
+
+OthelloWindow 类与上一章的对应类颇为相似。不过，除了菜单和菜单项之外，这个版本的窗口还包含子菜单。子菜单通过调用 \texttt{addAction} 方法来添加，相关代码位于 OthelloWindow.cpp 文件中。
+
+\medskip\noindent{\ttfamily\bfseries OthelloWindow.h}
+
+\begin{codebox}
+#ifndef OTHELLOWINDOW_H
+#define OTHELLOWINDOW_H
+
+#include "..\MainWindow\MainWindow.h"
+#include "OthelloWidget.h"
+
+class OthelloWindow : public MainWindow {
+  Q_OBJECT
+
+  public:
+    OthelloWindow(QWidget *parentWidget = nullptr);
+    ~OthelloWindow();
+
+    void closeEvent(QCloseEvent *eventPtr)
+                   {m_othelloWidgetPtr->closeEvent(eventPtr);}
+
+  private:
+    OthelloWidget* m_othelloWidgetPtr;
+};
+
+#endif // OTHELLOWINDOW_H
+\end{codebox}
+
+OthelloWindow.cpp 文件存放 OthelloWindow 类各个方法的定义。
+
+\medskip\noindent{\ttfamily\bfseries OthelloWindow.cpp}
+
+\begin{codebox}
+#include "OthelloWidget.h"
+#include "OthelloWindow.h"
+#include <QtWidgets>
+\end{codebox}
+
+窗口的标题已经改为 Othello Advanced：
+
+\begin{codebox}
+OthelloWindow::OthelloWindow(QWidget *parentWidget /*= nullptr*/)
+ :MainWindow(parentWidget) {
+  setWindowTitle(tr("Othello Advanced"));
+  resize(1000, 500);
+
+  m_othelloWidgetPtr = new OthelloWidget(this);
+  setCentralWidget(m_othelloWidgetPtr);
+
+  { QMenu* gameMenuPtr = menuBar()->addMenu(tr("&Game"));
+    connect(gameMenuPtr, SIGNAL(aboutToShow()),
+            this, SLOT(onMenuShow()));
+\end{codebox}
+
+Game 菜单有两个子菜单：Computer Starts 和 Human Starts：
+
+\begin{codebox}
+    { QMenu* computerStartsMenuPtr =
+        gameMenuPtr->addMenu(tr("&Computer Starts"));
+      connect(computerStartsMenuPtr, SIGNAL(aboutToShow()),
+              this, SLOT(onMenuShow()));
+\end{codebox}
+
+Computer Starts 子菜单包含 Computer Black 和 Computer White 两个菜单项：
+
+\begin{codebox}
+      addAction(computerStartsMenuPtr, tr("Computer &Black"),
+                SLOT(onComputerStartsBlack()), 0,
+                tr("Computer Black"), nullptr,
+                tr("Computer Black"),
+                LISTENER(isComputerStartsBlackEnabled));
+
+      addAction(computerStartsMenuPtr, tr("Computer &White"),
+                SLOT(onComputerStartsWhite()), 0,
+                tr("Computer White"), nullptr,
+                tr("Computer White"),
+                LISTENER(isComputerStartsWhiteEnabled));
+    }
+\end{codebox}
+
+Human Starts 子菜单包含 Human Black 和 Human White 两个菜单项：
+
+\begin{codebox}
+    { QMenu* humanStartsMenuPtr =
+        gameMenuPtr->addMenu(tr("&Human Starts"));
+      connect(humanStartsMenuPtr, SIGNAL(aboutToShow()),
+              this, SLOT(onMenuShow()));
+
+      addAction(humanStartsMenuPtr, tr("Human &Black"),
+                SLOT(onHumanStartsBlack()), 0, tr("Human Black"),
+                nullptr, tr("Human Black"),
+                LISTENER(isHumanStartsBlackEnabled));
+
+      addAction(humanStartsMenuPtr, tr("Human &White"),
+                SLOT(onHumanStartsWhite()), 0, tr("Human White"),
+                nullptr, tr("Human White"),
+                LISTENER(isHumanStartsWhiteEnabled));
+    }
+
+    gameMenuPtr->addSeparator();
+
+    addAction(gameMenuPtr, tr("&Quit the Game"),
+              SLOT(onQuit()),
+              QKeySequence(Qt::CTRL + Qt::Key_Q), tr("Quit Game"),
+              nullptr, tr("Quit the Game"),
+              LISTENER(isQuitEnabled));
+
+    addAction(gameMenuPtr, tr("E&xit"),
+              SLOT(onExit()), QKeySequence::Quit);
+  }
+}
+
+OthelloWindow::~OthelloWindow() {
+  delete m_othelloWidgetPtr;
+}
+\end{codebox}
+
+\subsubsection{OthelloWidget 类}
+
+OthelloWidget 类持有奥赛罗棋的功能。它允许计算机与人类对弈：
+
+\medskip\noindent{\ttfamily\bfseries OthelloWidget.h}
+
+\begin{codebox}
+#ifndef OTHELLOWIDGET_H
+#define OTHELLOWIDGET_H
+
+#include "..\MainWindow\GameWidget.h"
+
+#define ROWS    8
+#define COLUMNS 8
+
+enum Mark {Empty = 0, Black, White};
+
+class OthelloWidget : public GameWidget {
+  Q_OBJECT
+
+  public:
+    OthelloWidget(QWidget* parentWidget);
+
+    void mouseMark(int row, int column);
+    void drawMark(QPainter& painter,
+                  const QRect& markRect, int mark);
+
+  public slots:
+    DEFINE_LISTENER(OthelloWidget, isComputerStartsBlackEnabled);
+    DEFINE_LISTENER(OthelloWidget, isComputerStartsWhiteEnabled);
+    DEFINE_LISTENER(OthelloWidget, isHumanStartsBlackEnabled);
+    DEFINE_LISTENER(OthelloWidget, isHumanStartsWhiteEnabled);
+
+    void onComputerStartsBlack();
+    void onComputerStartsWhite();
+    void onHumanStartsBlack();
+    void onHumanStartsWhite();
+
+  private:
+    bool checkWinner();
+    void turn(int row, int column, Mark mark);
+    void calculateComputerMove();
+    void calculateTurns(int row, int column, Mark mark,
+                        QSet<QPair<int,int>>& totalSet,
+                        int& neighbours);
+    Mark m_humanMark, m_computerMark;
+};
+
+#endif // OTHELLOWIDGET_H
+\end{codebox}
+
+OthelloWidget.cpp 文件存放 OthelloWidget 类各个方法的定义：
+
+\medskip\noindent{\ttfamily\bfseries OthelloWidget.cpp}
+
+\begin{codebox}
+#include "OthelloWidget.h"
+#include "OthelloWindow.h"
+
+#include <QTime>
+#include <CTime>
+#include <CAssert>
+using namespace std;
+
+OthelloWidget::OthelloWidget(QWidget* parentWidget)
+ :GameWidget(ROWS, COLUMNS, parentWidget) {
+  // Empty.
+}
+\end{codebox}
+
+\texttt{isComputerStartsBlackEnabled}、\texttt{isComputerStartsWhiteEnabled}、\texttt{isHumanStartsBlackEnabled} 和 \texttt{isHumanStartsWhiteEnabled} 方法在 Computer Starts 和 Human Starts 子菜单显示之前被调用。如果没有对局正在进行，它们就处于启用状态：
+
+\begin{codebox}
+bool OthelloWidget::isComputerStartsBlackEnabled() {
+  return !isGameInProgress();
+}
+
+bool OthelloWidget::isComputerStartsWhiteEnabled() {
+  return !isGameInProgress();
+}
+
+bool OthelloWidget::isHumanStartsBlackEnabled() {
+  return !isGameInProgress();
+}
+
+bool OthelloWidget::isHumanStartsWhiteEnabled() {
+  return !isGameInProgress();
+}
+\end{codebox}
+
+\texttt{onComputerStartsBlack} 和 \texttt{onComputerStartsWhite} 方法在用户选择 Computer Starts 子菜单中的某个菜单项时被调用。它们把计算机的棋子设为黑色或白色，通过在棋盘中央放置棋子来开始对局，并更新窗口：
+
+\begin{codebox}
+void OthelloWidget::onComputerStartsBlack() {
+  setGameInProgress(true);
+  set(ROWS / 2, COLUMNS / 2, m_computerMark = Black);
+  m_humanMark = White;
+  update();
+}
+
+void OthelloWidget::onComputerStartsWhite() {
+  setGameInProgress(true);
+  set(ROWS / 2, COLUMNS / 2, m_computerMark = White);
+  m_humanMark = Black;
+  update();
+}
+\end{codebox}
+
+\texttt{onHumanStartsBlack} 和 \texttt{onHumanStartsWhite} 方法在用户选择 Human Starts 子菜单中的某个菜单项时被调用。它们把计算机的棋子设为黑色或白色，并更新窗口。它们不会在棋盘上放置任何棋子，而是由人类来先走：
+
+\begin{codebox}
+void OthelloWidget::onHumanStartsBlack() {
+  setGameInProgress(true);
+  m_humanMark = Black;
+  m_computerMark = White;
+  update();
+}
+
+void OthelloWidget::onHumanStartsWhite() {
+  setGameInProgress(true);
+  m_humanMark = White;
+  m_computerMark = Black;
+
+  update();
+}
+\end{codebox}
+
+当用户点击棋盘中的一个空位置时会调用 \texttt{mouseMark} 方法。我们首先在该位置放置下一枚棋子，并翻转由这个走法引起的棋子：
+
+\begin{codebox}
+void OthelloWidget::mouseMark(int row, int column) {
+  set(row, column, m_humanMark);
+  turn(row, column, m_humanMark);
+  update();
+\end{codebox}
+
+如果人类的走法没有使棋盘填满，我们就调用 \texttt{calculateComputerMove} 来把计算机的棋子放到能翻转最多对方棋子的位置。然后我们更新窗口，并再次调用 \texttt{checkWinner} 来判断计算机的走法是否使棋盘填满了：
+
+\begin{codebox}
+  if (!checkWinner()) {
+    calculateComputerMove();
+    update();
+    checkWinner();
+  }
+}
+\end{codebox}
+
+当棋盘中某个位置需要重绘时会调用 \texttt{drawMark} 方法。它以与上一章相同的方式绘制棋子：
+
+\begin{codebox}
+void OthelloWidget::drawMark(QPainter& painter,
+                             const QRect& markRect, int mark) {
+  painter.setPen(Qt::black);
+  painter.drawRect(markRect);
+  painter.fillRect(markRect, Qt::lightGray);
+
+  switch (mark) {
+    case Black:
+      painter.setPen(Qt::black);
+      painter.setBrush(Qt::black);
+      painter.drawEllipse(markRect);
+      break;
+
+    case White:
+      painter.setPen(Qt::white);
+      painter.setBrush(Qt::white);
+      painter.drawEllipse(markRect);
+      break;
+
+    case Empty:
+      break;
+  }
+}
+\end{codebox}
+
+本章的 \texttt{checkWinner} 方法也与上一章的对应方法相似。它检查棋盘是否已满。如果已满，就宣布获胜者，否则就是平局：
+
+\begin{codebox}
+bool OthelloWidget::checkWinner() {
+  int blacks = 0, whites = 0, empties = 0;
+
+  for (int row = 0; row < ROWS; ++row) {
+    for (int column = 0; column < COLUMNS; ++column) {
+      switch (get(row, column)) {
+        case Black:
+          ++blacks;
+          break;
+
+        case White:
+          ++whites;
+          break;
+
+        case Empty:
+          ++empties;
+          break;
+      }
+    }
+  }
+
+  if (empties == 0) {
+    QMessageBox messageBox(QMessageBox::Information,
+                           tr("Victory"), QString());
+    QString text;
+
+    if (blacks > whites) {
+      text.sprintf("The Winner: %s.", (m_computerMark == Black)
+                                      ? "Computer" : "Human");
+    }
+    else if (whites > blacks) {
+      text.sprintf("The Winner: %s.", (m_computerMark == White)
+                                      ? "Computer" : "Human");
+    }
+    else {
+      text.sprintf("A Draw.");
+    }
+
+    messageBox.setText(text);
+    messageBox.setStandardButtons(QMessageBox::Ok);
+    messageBox.exec();
+    setGameInProgress(false);
+    clearGrid();
+    update();
+
+    return true;
+  }
+
+  return false;
+}
+\end{codebox}
+
+\texttt{calculateComputerMove} 方法计算计算机的走法，使被翻转的对方棋子数量最多。我们遍历计算机可放置棋子的各个位置，对每个位置调用 \texttt{calculateTurns} 来获得如果把棋子放在该位置将被翻转的对方棋子的最大数量。对每个位置，我们还获得相邻棋子的数量，在我们找不到任何可翻转的棋子时这一数据很有用。
+
+\texttt{maxTurnSetSize} 和 \texttt{maxNeighbours} 字段保存可翻转棋子和相邻棋子的最大数量；\texttt{maxTurnSetList} 保存可翻转棋子的最大位置集合的列表，\texttt{maxNeighboursList} 保存相邻棋子数量最大位置列表：
+
+\begin{codebox}
+void OthelloWidget::calculateComputerMove() {
+  int maxTurnSetSize = 0, maxNeighbours = 0;
+  QList<QSet<QPair<int,int>>> maxTurnSetList;
+  QList<QPair<int,int>> maxNeighboursList;
+\end{codebox}
+
+我们遍历棋盘中的所有位置。对每个空位置，我们获得如果把我们的棋子放在该位置将被翻转的对方棋子数量。我们还获得相邻的对方棋子数量：
+
+\begin{codebox}
+  for (int row = 0; row < ROWS; ++row) {
+    for (int column = 0; column < COLUMNS; ++column) {
+      if (get(row, column) == Empty) {
+        QSet<QPair<int,int>> turnSet;
+        int neighbours = 0;
+        calculateTurns(row, column, m_computerMark,
+                       turnSet, neighbours);
+        int turnSetSize = turnSet.size();
+\end{codebox}
+
+如果我们找到的可翻转棋子集合大于当前的最大集合，我们就把 \texttt{maxTurnSetSize} 字段设为新集合的大小，把当前位置插入集合中，清空 \texttt{maxTurnSetList}（因为我们不想要之前那些较小的集合），并加入新集合。
+
+为了简单起见，我们把当前集合加入列表；把它加入集合比用其他任何方式保存都要容易：
+
+\begin{codebox}
+        if (turnSetSize > maxTurnSetSize) {
+          maxTurnSetSize = turnSetSize;
+          turnSet.insert(QPair<int,int>(row, column));
+          maxTurnSetList.clear();
+          maxTurnSetList.append(turnSet);
+        }
+\end{codebox}
+
+如果新集合非空且与最大集合大小相同，我们就直接把它加入 \texttt{maxTurnSetList}：
+
+\begin{codebox}
+        else if ((turnSetSize > 0) &&
+                 (turnSetSize == maxTurnSetSize)) {
+          turnSet.insert(QPair<int,int>(row, column));
+          maxTurnSetList.append(turnSet);
+        }
+\end{codebox}
+
+我们还检查当前位置的相邻棋子数量，处理方式与可翻转集合的情形相同。如果相邻棋子数量超过了最大相邻棋子数量，我们就清空 \texttt{maxNeighboursList} 并加入新位置：
+
+\begin{codebox}
+        if (neighbours > maxNeighbours) {
+          maxNeighbours = neighbours;
+          maxNeighboursList.clear();
+          maxNeighboursList.append(QPair<int,int>(row, column));
+        }
+\end{codebox}
+
+如果至少有一个相邻棋子，且相邻棋子数量等于最大相邻棋子数量，我们就把它加入 \texttt{maxNeighboursList} 列表：
+
+\begin{codebox}
+        else if ((neighbours > 0) &&
+                 (neighbours == maxNeighbours)) {
+          maxNeighboursList.append(QPair<int,int>(row, column));
+        }
+      }
+    }
+  }
+\end{codebox}
+
+如果至少有一个位置能翻转至少一枚对方棋子，我们就选择它。如果有多个位置能翻转相同数量的对方棋子，我们就随机选择其中一个。我们使用 C 标准函数 \texttt{srand}、\texttt{rand} 和 \texttt{time} 来获得一个随机整数。
+
+随机数生成算法先取一个起始值，然后生成一列随机数。\texttt{srand} 函数用起始值初始化生成器，之后反复调用 \texttt{rand} 来获得新的随机数。为了避免每次都以相同的起始值调用 \texttt{srand}（那会导致每次产生相同的随机数序列），我们以 C 标准函数 \texttt{time} 的返回值来调用 \texttt{srand}，\texttt{time} 返回自 1970 年 1 月 1 日以来的秒数。这样，每局对弈随机数生成器都以一个新值初始化，我们通过反复调用 \texttt{rand} 获得新的随机数序列：
+
+\begin{codebox}
+  if (maxTurnSetSize > 0) {
+    srand(time(NULL));
+    int index = rand() % maxTurnSetList.size();
+    QSet<QPair<int,int>> maxTurnSet = maxTurnSetList[index];
+\end{codebox}
+
+获得要翻转的位置集合之后，我们遍历该集合，把计算机的棋子放到其中的所有位置：
+
+\begin{codebox}
+    for (QPair<int,int> position : maxTurnSet) {
+      int row = position.first, column = position.second;
+      set(row, column, m_computerMark);
+    }
+  }
+\end{codebox}
+
+如果没有任何位置能导致对方棋子被翻转，我们就转而考察相邻棋子。同样地，我们在相邻棋子数量最多的位置中随机选择一个。注意，此时我们不需要遍历任何集合；在这种情况下，我们只放置一枚棋子：
+
+\begin{codebox}
+  else {
+    assert(!maxNeighboursList.empty());
+    srand(time(NULL));
+    int index = rand() % maxNeighboursList.size();
+    QPair<int,int> position = maxNeighboursList[index];
+    int row = position.first, column = position.second;
+    set(row, column, m_computerMark);
+  }
+}
+\end{codebox}
+
+当人类走了一步之后会调用 \texttt{turn} 方法。它调用 \texttt{calculateMark} 来获得可翻转的对方棋子集合，然后遍历该集合，把棋盘中的各个位置都设置好：
+
+\begin{codebox}
+void OthelloWidget::turn(int row, int column, Mark mark) {
+  QSet<QPair<int,int>> turnSet;
+  calculateMark(row, column, mark, turnSet);
+
+  for (QPair<int,int> pair : turnSet) {
+    int row = pair.first, column = pair.second;
+    set(row, column, mark);
+  }
+}
+\end{codebox}
+
+\texttt{calculateTurns} 方法计算给定位置可翻转的对方棋子集合以及相邻棋子的数量：
+
+\begin{codebox}
+void OthelloWidget::calculateTurns(int row, int column,
+                  Mark playerMark,QSet<QPair<int,int>>& totalSet,
+                  int& neighbours) {
+\end{codebox}
+
+\texttt{directionArray} 中的每个整数对都按照罗盘方位对应一个方向：
+
+\begin{codebox}
+  QPair<int,int> directionArray[] =
+    {QPair<int,int>(-1, 0),   // 北
+     QPair<int,int>(-1, 1),   // 东北
+     QPair<int,int>(0, 1),    // 东
+     QPair<int,int>(1, 1),    // 东南
+     QPair<int,int>(1, 0),    // 南
+     QPair<int,int>(1, -1),   // 西南
+     QPair<int,int>(0, -1),   // 西
+     QPair<int,int>(-1, -1)}; // 西北
+\end{codebox}
+
+数组的大小可以用数组的总大小（以字节为单位）除以第一个元素的大小来确定：
+
+\begin{codebox}
+  int arraySize =
+    (sizeof directionArray) / (sizeof directionArray[0]);
+
+  neighbours = 0;
+  int opponentMark = (playerMark == Black) ? White : Black;
+\end{codebox}
+
+我们遍历各个方向；对每个方向，只要找到对方的棋子，就沿该方向继续移动：
+
+\begin{codebox}
+  for (int index = 0; index < arraySize; ++index) {
+    QPair<int,int> pair = directionArray[index];
+\end{codebox}
+
+在沿一个方向迭代的过程中，row 与 column 字段保存当前的行和列：
+
+\begin{codebox}
+    int rowStep = pair.first, columnStep = pair.second,
+        currRow = row, currColumn = column;
+\end{codebox}
+
+首先，我们检查紧邻的位置上是否有对方棋子的相邻棋子。如果我们尚未到达棋盘的某条边界，并且该位置上有对方棋子，我们就把 neighbours 加一：
+
+\begin{codebox}
+    if (((row + rowStep) >= 0) && ((row + rowStep) < ROWS) &&
+        ((column + rowStep) >= 0) &&
+        ((column + columnStep) < COLUMNS) &&
+        (get(row + rowStep, column + rowStep) == opponentMark)) {
+      ++neighbours;
+    }
+\end{codebox}
+
+我们把迭代过程中找到的棋子收集在 \texttt{directionSet} 中：
+
+\begin{codebox}
+    QSet<QPair<int,int>> directionSet;
+
+    while (true) {
+      currRow += rowStep;
+      currColumn += columnStep;
+\end{codebox}
+
+如果我们到达棋盘的某条边界，或者找到空位置，就中断迭代：
+
+\begin{codebox}
+      if ((currRow < 0) || (currRow == ROWS) ||
+          (currColumn < 0) || (currColumn == COLUMNS) ||
+          (get(currRow, currColumn) == Empty)) {
+        break;
+      }
+\end{codebox}
+
+如果我们找到玩家的棋子，就把 \texttt{directionSet} 并入总集合，并中断迭代：
+
+\begin{codebox}
+      else if (get(currRow, currColumn) == playerMark) {
+        totalSet += directionSet;
+        break;
+      }
+\end{codebox}
+
+如果我们没有找到玩家的棋子或空位置，说明找到的就是对方的棋子，我们就把它的位置加入方向集合：
+
+\begin{codebox}
+      else {
+        directionSet.insert(QPair<int,int>(row, column));
+      }
+    }
+  }
+}
+\end{codebox}
+
+\subsubsection{main 函数}
+
+和往常一样，\texttt{main} 函数创建一个应用程序，显示窗口，并执行应用程序，直到用户关闭窗口或选择 Exit 菜单项。
+
+\medskip\noindent{\ttfamily\bfseries Main.cpp}
+
+\begin{codebox}
+#include "OthelloWidget.h"
+#include "OthelloWindow.h"
+#include <QApplication>
+
+int main(int argc, char *argv[]) {
+  QApplication application(argc, argv);
+  OthelloWindow othelloWindow;
+  othelloWindow.show();
+  return application.exec();
+}
+\end{codebox}
+
+\section{圈叉棋}
+
+本章的圈叉棋应用程序基于上一章的版本。不同之处在于，这个版本中由计算机与人类对弈。
+
+\subsection{NaCWindow 类}
+
+NaCWindow 类与上一节的 OthelloWindow 类相似（NaC 是 Noughts and Crosses 的缩写）。它向游戏菜单添加了两个子菜单，用来选择由计算机还是人类先走，并选择圈还是叉：
+
+\medskip\noindent{\ttfamily\bfseries NaCWindow.h}
+
+\begin{codebox}
+#ifndef NACWINDOW_H
+#define NACWINDOW_H
+
+#include "..\MainWindow\MainWindow.h"
+#include "NaCWidget.h"
+
+class NaCWindow : public MainWindow {
+  Q_OBJECT
+
+  public:
+    NaCWindow(QWidget *parentWidget = nullptr);
+    ~NaCWindow();
+
+  public:
+    void closeEvent(QCloseEvent *eventPtr)
+                   {m_nacWidgetPtr->closeEvent(eventPtr);}
+
+  private:
+    NaCWidget* m_nacWidgetPtr;
+};
+
+#endif // NACWINDOW_H
+\end{codebox}
+
+NaCWindow.cpp 文件存放 NaCWindow 类各个方法的定义：
+
+\medskip\noindent{\ttfamily\bfseries NaCWindow.cpp}
+
+\begin{codebox}
+#include "NaCWindow.h"
+#include <QtWidgets>
+\end{codebox}
+
+标题已经改为 Noughts and Crosses Advanced：
+
+\begin{codebox}
+NaCWindow::NaCWindow(QWidget *parentWidget /*= nullptr*/)
+ :MainWindow(parentWidget) {
+  setWindowTitle(tr("Noughts and Crosses Advanced"));
+  resize(1000, 500);
+
+  m_nacWidgetPtr = new NaCWidget(this);
+  setCentralWidget(m_nacWidgetPtr);
+
+  { QMenu* gameMenuPtr = menuBar()->addMenu(tr("&Game"));
+    connect(gameMenuPtr, SIGNAL(aboutToShow()),
+            this, SLOT(onMenuShow()));
+
+    { QMenu* computerStartsMenuPtr =
+        gameMenuPtr->addMenu(tr("&Computer Starts"));
+      connect(computerStartsMenuPtr, SIGNAL(aboutToShow()),
+              this, SLOT(onMenuShow()));
+
+      addAction(computerStartsMenuPtr, tr("Computer &Nought"),
+                SLOT(onComputerStartsNought()), 0,
+                tr("Computer Nought"), nullptr,
+                tr("Computer Nought"),
+                LISTENER(isComputerStartsNoughtEnabled));
+
+        addAction(computerStartsMenuPtr, tr("Computer &Cross"),
+                  SLOT(onComputerStartsCross()), 0,
+                  tr("Computer Cross"), nullptr,
+                  tr("Computer Cross"),
+                  LISTENER(isComputerStartsCrossEnabled));
+    }
+
+    { QMenu* humanStartsMenuPtr =
+        gameMenuPtr->addMenu(tr("&Human Starts"));
+      connect(humanStartsMenuPtr, SIGNAL(aboutToShow()),
+              this, SLOT(onMenuShow()));
+
+      addAction(humanStartsMenuPtr, tr("Human &Nought"),
+                SLOT(onHumanNought()), 0, tr("Human Nought"),
+                nullptr, tr("Human Nought"),
+                LISTENER(isHumanNoughtEnabled));
+
+      addAction(humanStartsMenuPtr, tr("Human &Cross"),
+                SLOT(onHumanCross()), 0, tr("Human Cross"),
+                nullptr, tr("Human Cross"),
+                LISTENER(isHumanCrossEnabled));
+    }
+
+    gameMenuPtr->addSeparator();
+
+    addAction(gameMenuPtr, tr("&Quit the Game"),
+              SLOT(onQuit()),
+              QKeySequence(Qt::CTRL + Qt::Key_Q), tr("Quit Game"),
+              nullptr, tr("Quit the Game"),
+              LISTENER(isQuitEnabled));
+
+    addAction(gameMenuPtr, tr("E&xit"),
+              SLOT(onExit()), QKeySequence::Quit);
+  }
+}
+
+NaCWindow::~NaCWindow() {
+  delete m_nacWidgetPtr;
+}
+\end{codebox}
+
+\subsubsection{NaCWidget 类}
+
+与上一章的版本相比，NaCWidget 类得到了改进。它持有 \texttt{calculateComputerMove} 和 \texttt{calculateMarkValue} 方法，让计算机与人类对弈：
+
+\medskip\noindent{\ttfamily\bfseries NaCWidget.h}
+
+\begin{codebox}
+#ifndef NACWIDGET_H
+#define NACWIDGET_H
+
+#include "..\MainWindow\GameWidget.h"
+
+#define ROWS    26
+#define COLUMNS 26
+
+enum Mark {Empty = 0, Nought, Cross};
+
+class NaCWidget : public GameWidget {
+  Q_OBJECT
+
+  public:
+    NaCWidget(QWidget* parentWidget);
+
+    void mouseMark(int row, int column);
+    void drawMark(QPainter& painter,
+                  const QRect& markRect, int mark);
+
+  public slots:
+    DEFINE_LISTENER(NaCWidget, isComputerStartsNoughtEnabled);
+    DEFINE_LISTENER(NaCWidget, isComputerStartsCrossEnabled);
+    DEFINE_LISTENER(NaCWidget, isHumanStartsNoughtEnabled);
+    DEFINE_LISTENER(NaCWidget, isHumanStartsCrossEnabled);
+
+    void onComputerStartsNought();
+    void onComputerStartsCross();
+    void onHumanStartsNought();
+    void onHumanStartsCross();
+
+  private:
+    bool checkWinner(int row, int column, Mark mark);
+    int countMarks(int row, int column, int rowStep,
+                   int columnStep, Mark mark);
+    void calculateComputerMove(int& row, int &column);
+    double calculateMarkValue(int row, int column, Mark mark);
+
+    Mark m_humanMark, m_computerMark;
+};
+
+#endif // NACWIDGET_H
+\end{codebox}
+
+NaCWidget.cpp 文件存放 NaCWidget 类各个方法的定义：
+
+\medskip\noindent{\ttfamily\bfseries NaCWidget.cpp}
+
+\begin{codebox}
+#include "NaCWidget.h"
+#include <CTime>
+#include <CAssert>
+
+NaCWidget::NaCWidget(QWidget* parentWidget)
+ :GameWidget(ROWS, COLUMNS, parentWidget) {
+  // Empty.
+}
+\end{codebox}
+
+\texttt{isComputerStartsNoughtEnabled}、\texttt{isComputerStartsCrossEnabled}、\texttt{isHumanStartsNoughtEnabled} 和 \texttt{isHumanStartsCrossEnabled} 方法决定是否启用 Computer Nought、Computer Cross、Human Nought 和 Human Cross 菜单项。当没有对局正在进行时，它们都是启用的：
+
+\begin{codebox}
+bool NaCWidget::isComputerStartsNoughtEnabled() {
+  return !isGameInProgress();
+}
+
+bool NaCWidget::isComputerStartsCrossEnabled() {
+  return !isGameInProgress();
+}
+
+bool NaCWidget::isHumanStartsNoughtEnabled() {
+  return !isGameInProgress();
+}
+
+bool NaCWidget::isHumanStartsCrossEnabled() {
+  return !isGameInProgress();
+}
+\end{codebox}
+
+\texttt{onComputerStartsNought}、\texttt{onComputerStartsCross}、\texttt{onHumanStartsNought} 和 \texttt{onHumanStartsCross} 方法在用户选择 Computer Noughts、Computer Cross、Human Noughts 和 Human Cross 菜单项时被调用。它们把对局设为进行中，把计算机和人类的棋子设为圈或叉，并更新窗口。在计算机先走的情况下，棋子放在棋盘中央，以便尽可能充分地利用棋盘：
+
+\begin{codebox}
+void NaCWidget::onComputerStartsNought() {
+  setGameInProgress(true);
+  set(ROWS /2, COLUMNS / 2, m_computerMark = Nought);
+  m_humanMark = Cross;
+  update();
+}
+
+void NaCWidget::onComputerStartsCross() {
+  setGameInProgress(true);
+  set(ROWS /2, COLUMNS / 2, m_computerMark = Cross);
+  m_humanMark = Nought;
+  update();
+}
+
+void NaCWidget::onHumanStartsNought() {
+  setGameInProgress(true);
+  m_computerMark = Cross;
+  m_humanMark = Nought;
+  update();
+}
+
+void NaCWidget::onHumanStartsCross() {
+  setGameInProgress(true);
+  m_computerMark = Nought;
+  m_humanMark = Cross;
+  update();
+}
+\end{codebox}
+
+当人类玩家点击棋盘中的一个空位置时会调用 \texttt{mouseMark} 方法。我们首先把棋子放到该位置，并更新窗口：
+
+\begin{codebox}
+void NaCWidget::mouseMark(int row, int column) {
+  set(row, column, m_humanMark);
+  update();
+\end{codebox}
+
+如果人类的走法没有使他赢得对局，我们就计算计算机的下一步走法，把棋子放到该位置，检查这个走法是否使计算机赢得了对局，并更新窗口：
+
+\begin{codebox}
+  if (!checkWinner(row, column, m_humanMark)) {
+    calculateComputerMove(row, column);
+    set(row, column, m_computerMark);
+    checkWinner(row, column, m_computerMark);
+    update();
+  }
+}
+\end{codebox}
+
+当某个位置需要重绘时会调用 \texttt{drawMark} 方法。它与上一章的对应方法相似，绘制一个圈或一个叉：
+
+\begin{codebox}
+void NaCWidget::drawMark(QPainter& painter,
+                         const QRect& markRect, int mark) {
+  painter.setPen(Qt::black);
+
+  switch (mark) {
+    case Nought:
+      painter.drawEllipse(markRect);
+      break;
+
+    case Cross:
+      painter.drawLine(markRect.topLeft(),
+                       markRect.bottomRight());
+      painter.drawLine(markRect.topRight(),
+                       markRect.bottomLeft());
+      break;
+
+    case Empty:
+      break;
+  }
+}
+\end{codebox}
+
+\texttt{checkWinner} 方法也与上一章的对应方法相似。它判断最近的走法是否造成了五子连珠。如果是，就宣布获胜者：
+
+\begin{codebox}
+bool NaCWidget::checkWinner(int row, int column, Mark mark) {
+  if ((countMarks(row, column, -1, 0, mark) >= 5) ||
+      (countMarks(row, column, 0, -1, mark) >= 5) ||
+      (countMarks(row, column, -1, 1, mark) >= 5) ||
+      (countMarks(row, column, 1, 1, mark) >= 5)) {
+    QMessageBox messageBox(QMessageBox::Information,
+                           tr("Victory"), QString());
+    QString text;
+    text.sprintf("The Winner: %s.",
+                 (mark == m_computerMark) ? "Computer" : "Human");
+
+    messageBox.setText(text);
+    messageBox.setStandardButtons(QMessageBox::Ok);
+    messageBox.exec();
+    setGameInProgress(false);
+    clearGrid();
+    update();
+    return true;
+  }
+
+  return false;
+}
+\end{codebox}
+
+\texttt{countMarks} 方法统计一行中棋子的数量。与上一章的对应方法相比，它得到了改进。在这个版本中，我们还统计该走法可能导致的最多的连子数量。由于 \texttt{countMarks} 会由 \texttt{calculateComputerMove} 调用，我们需要知道这个走法可能导致多少连子：
+
+\begin{codebox}
+double NaCWidget::countMarks(int row, int column, int rowStep,
+                        int columnStep, Mark mark) {
+\end{codebox}
+
+\texttt{markCount} 保存如果我们在给定位置放置棋子将得到的一行棋子数量；\texttt{freeCount} 保存如果我们继续在该行添加棋子，可能得到的一行棋子数量。原因是计算机不会向不可能形成五子连珠的行添加棋子：
+
+\begin{codebox}
+  double markCount = 0;
+  int freeCount = 0;
+\end{codebox}
+
+我们在给定方向上遍历棋盘：
+
+\begin{codebox}
+  { bool marked = true;
+    int currentRow = row, currentColumn = column;
+
+    while ((currentRow >= 0) && (currentRow < ROWS) &&
+           (currentColumn >= 0) && (currentColumn < COLUMNS)) {
+\end{codebox}
+
+只要找到的是我们的棋子，我们就同时增加 \texttt{markCount} 和 \texttt{freeCount}：
+
+\begin{codebox}
+      if (get(currentRow, currentColumn) == mark) {
+        if (marked) {
+          ++markCount;
+        }
+
+        ++freeCount;
+      }
+\end{codebox}
+
+如果我们找到空位置，就向 \texttt{markCount} 加上 0.4（因为空闲的行比封闭的行好），并继续增加 \texttt{freeCount}：
+
+\begin{codebox}
+      else if (get(currentRow, currentColumn) == Empty) {
+        if (marked) {
+          markCount += 0.4;
+        }
+
+        marked = false;
+        ++freeCount;
+      }
+\end{codebox}
+
+如果我们既没找到计算机的棋子也没找到空位置，那么一定是找到了人类的棋子，我们就中断迭代：
+
+\begin{codebox}
+      else {
+        break;
+      }
+\end{codebox}
+
+在每次迭代的末尾，我们把行和列的步长加到当前的行和列上：
+
+\begin{codebox}
+      currentRow += rowStep;
+      currentColumn += columnStep;
+    }
+  }
+\end{codebox}
+
+我们在相反的方向上进行类似的迭代。唯一的区别是，在每次迭代的末尾，我们从当前的行和列中减去行和列的步长，而不是加上它们：
+
+\begin{codebox}
+  { bool marked = true;
+    int currentRow = row + rowStep,
+        currentColumn = column + columnStep;
+
+    while ((currentRow >= 0) && (currentRow < ROWS) &&
+           (currentColumn >= 0) && (currentColumn < COLUMNS)) {
+      if (get(currentRow, currentColumn) == mark) {
+        if (marked) {
+          ++markCount;
+        }
+      }
+      else if (get(currentRow, currentColumn) == Empty) {
+        if (marked) {
+          markCount += 0.4;
+        }
+
+        marked = false;
+        ++freeCount;
+      }
+      else {
+        break;
+      }
+
+      currentRow -= rowStep;
+      currentColumn -= columnStep;
+    }
+  }
+\end{codebox}
+
+如果空闲计数至少为五，我们就返回棋子计数。如果小于五，我们就返回零，因为在这个方向上不可能形成五子连珠：
+
+\begin{codebox}
+  return (freeCount >= 5) ? markCount : 0;
+}
+\end{codebox}
+
+\texttt{calculateComputerMove} 方法计算能形成最多连子的计算机走法。我们同时统计计算机和人类的连子，因为我们可能面临这样的情形：需要阻止人类获胜，而不是让计算机的获胜机会最大化。
+
+\texttt{maxComputerValue} 和 \texttt{maxHumanValue} 字段保存到目前为止找到的最多连子数量。\texttt{maxComputerList} 和 \texttt{maxHumanList} 保存使计算机和人类形成最多连子的位置：
+
+\begin{codebox}
+void NaCWidget::calculateComputerMove(int& maxRow,int &maxColumn){
+  double maxComputerValue = 0, maxHumanValue = 0;
+  QList<QPair<int,int>> maxComputerList, maxHumanList;
+\end{codebox}
+
+我们遍历棋盘。对每个空位置，我们尝试放置计算机或人类的棋子，看看会造成多少连子：
+
+\begin{codebox}
+  for (int row = 0; row < ROWS; ++row) {
+    for (int column = 0; column < COLUMNS; ++column)  {
+      if (get(row, column) == Empty) {
+        set(row, column, m_computerMark);
+\end{codebox}
+
+我们获得计算机棋子和人类棋子所能形成的最多连子数量。如果它大于之前的最大数量，我们就清空列表并把该位置加入列表：
+
+\begin{codebox}
+        { double computerValue =
+            calculateMarkValue(row, column, m_computerMark);
+
+          if (computerValue > maxComputerValue) {
+            maxComputerValue = computerValue;
+            maxComputerList.clear();
+            maxComputerList.append(QPair<int,int>(row, column));
+          }
+\end{codebox}
+
+如果新的连子数量大于零且等于最大数量，我们就直接把该位置加入列表：
+
+\begin{codebox}
+          else if ((computerValue > 0) &&
+                   (computerValue == maxComputerValue)) {
+            maxComputerList.append(QPair<int,int>(row, column));
+          }
+        }
+\end{codebox}
+
+我们对人类棋子做与计算机棋子相同的处理：
+
+\begin{codebox}
+        set(row, column, m_humanMark);
+
+        { double humanValue =
+            calculateMarkValue(row, column, m_humanMark);
+
+          if (humanValue > maxHumanValue) {
+            maxHumanValue = humanValue;
+            maxHumanList.clear();
+            maxHumanList.append(QPair<int,int>(row, column));
+          }
+          else if ((humanValue > 0) &&
+                   (humanValue == maxHumanValue)) {
+            maxHumanList.append(QPair<int,int>(row, column));
+          }
+        }
+\end{codebox}
+
+最后，我们把该位置重置为空：
+
+\begin{codebox}
+        set(row, column, Empty);
+      }
+    }
+  }
+\end{codebox}
+
+无论是计算机还是人类，都必须至少存在一个能连子的位置：
+
+\begin{codebox}
+  assert(!maxComputerList.empty() && !maxHumanList.empty());
+\end{codebox}
+
+如果计算机的价值至少为二且大于人类的价值，或者人类的价值小于四，我们就从计算机的最大走法中随机选择一个：
+
+\begin{codebox}
+  if ((maxComputerValue >= 2) &&
+      ((maxComputerValue >= maxHumanValue) ||
+       (maxHumanValue < 3.8))) {
+    srand(time(NULL));
+    QPair<int,int> pair =
+      maxComputerList[rand() % maxComputerList.size()];
+    maxRow = pair.first;
+    maxColumn = pair.second;
+  }
+\end{codebox}
+
+但是，如果计算机无法连出至少两子，或者人类即将五子连珠，我们就从人类侧的最大走法中随机选择一个：
+
+\begin{codebox}
+  else {
+    srand(time(NULL));
+    QPair<int,int> pair =
+      maxHumanList[rand() % maxHumanList.size()];
+    maxRow = pair.first;
+    maxColumn = pair.second;
+  }
+}
+\end{codebox}
+
+\texttt{calculateMarkValue} 方法通过计算四个方向中较大的值，来算出给定位置可能造成的最多连子数量：
+
+\begin{codebox}
+double NaCWidget::calculateMarkValue(int row, int column,
+                                     Mark mark) {
+  return qMax(qMax(countMarks(row, column, -1, 0, mark),
+                   countMarks(row, column, 0, -1, mark)),
+              qMax(countMarks(row, column, -1, 1, mark),
+                   countMarks(row, column, 1, 1, mark)));
+}
+\end{codebox}
+
+\subsubsection{main 函数}
+
+最后，\texttt{main} 函数的工作方式与在 Qt 应用程序中一贯的做法相同：
+
+\medskip\noindent{\ttfamily\bfseries Main.cpp}
+
+\begin{codebox}
+#include "NaCWidget.h"
+#include "NaCWindow.h"
+#include <QApplication>
+
+int main(int argc, char *argv[]) {
+  QApplication application(argc, argv);
+  NaCWindow mainWindow;
+  mainWindow.show();
+  return application.exec();
+}
+\end{codebox}
+
+\section{小结}
+
+在本章中，我们开发了上一章各游戏的更高级版本。在奥赛罗棋和圈叉棋中，我们都添加了让计算机与人类对弈的代码。在奥赛罗棋中，我们寻找棋盘中能使对方棋子被翻转数量最多的位置。在圈叉棋中，我们搜索能给计算机带来最多连子的走法，最好是五子连珠。不过，我们也必须搜索对方潜在的连子数量，并在对方的下一步走法会导致其获胜时加以阻止。
+
+现在，我建议你在进入下一章之前，先放松一下，和计算机对弈几局。
+
+下一章我们将开始开发领域特定语言（Domain-Specific Language，DSL），这是一种面向特定领域的语言。我们将开发一个 DSL 来指定图形对象（如直线、矩形、椭圆和文本）的绘制方式，以及颜色、字体、画笔和刷子样式、对齐方式等设置。我们还会编写一个查看器来显示这些图形对象。

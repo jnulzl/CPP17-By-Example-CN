@@ -1,0 +1,479 @@
+% =============================================================================
+%  book/ccs.tex  ——  《C++17 By Example》中文版 导言区（Packt 原版版式）
+%  参考模板 D:/Ego/trans/latex_source_v2，按 Packt 原书实测版式改写：
+%    · 单色（黑/灰），无彩色色带、无盒式代码、无 Note/Tip 盒
+%    · 章首页：右侧大号衬线章号 + 无衬线章名（右对齐），无横线
+%    · 节标题：粗体无衬线、不编号
+%    · 代码：无框、左缩进的等宽字体，强调行加粗；无标题条、无行号
+%    · 行内代码：灰色等宽
+%    · 目录：扁平缩进层级、无引导点、页码右对齐
+%    · 页眉：左斜体章名 + 右 “Chapter N” + 细线；页脚：[ N ] 居中
+%    · 索引：两栏无衬线、粗体字母头、等宽页码
+% =============================================================================
+
+\documentclass[12bp,openany,oneside,UTF8]{book}
+\interfootnotelinepenalty=10000
+
+% -----------------------------------------------------------------------------
+%  基础宏包
+% -----------------------------------------------------------------------------
+\usepackage{textcomp}
+\usepackage[T1]{fontenc}
+\usepackage{microtype}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{ifthen}
+\usepackage{pgffor}
+\usepackage{xspace}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{indentfirst}
+\usepackage{subfiles}
+\usepackage{caption}
+\usepackage{xcolor}
+\usepackage[export]{adjustbox}
+\usepackage{multicol}
+
+% -----------------------------------------------------------------------------
+%  页面尺寸：Packt 原书实测 540 × 666 bp（7.5in × 9.25in），左右边距约 57/59bp
+% -----------------------------------------------------------------------------
+\usepackage[
+  paperwidth=541.4bp, paperheight=666.1bp,
+  left=56.7bp, right=56.7bp,
+  top=77.2bp, bottom=68bp,
+  headheight=22bp, headsep=16.5bp,
+  footskip=19.8bp]{geometry}
+
+% -----------------------------------------------------------------------------
+%  字体：中文正文思源宋体；标题/代码注释用微软雅黑（无衬线）；
+%        拉丁正文 Cambria（衬线）；代码 Consolas（等宽）
+% -----------------------------------------------------------------------------
+\usepackage{fontspec}
+\usepackage[fontset=none]{ctex}
+\usepackage[fontsize=10.5bp]{fontsize}
+\linespread{1.0}                         % 正文行距 12.6bp（=1.2×10.5，与原书一致）1.0833(13bp)/1.1250(13.5bp)/1.1667(14bp)/1.2083(14.5bp)/1.2500(15bp)/1.2917(15.5bp)/1.3334(16.0bp)
+
+\setCJKmainfont[AutoFakeSlant=true]{Source Han Serif SC}                 % 中文正文（衬线）
+\setCJKsansfont[AutoFakeBold=true,AutoFakeSlant=true]{Microsoft YaHei}   % 中文标题（无衬线）
+\setCJKmonofont[AutoFakeBold=true,AutoFakeSlant=true]{Microsoft YaHei}   % 代码块中的中文
+\setmainfont{PalatinoLinotype}[
+  Path=C:/Windows/Fonts/, Extension=.ttf,
+  UprightFont=pala, BoldFont=palab, ItalicFont=palai, BoldItalicFont=palabi]
+\setsansfont{Arial}[
+  Path=C:/Windows/Fonts/, Extension=.ttf,
+  UprightFont=arial, BoldFont=arialbd, ItalicFont=ariali, BoldItalicFont=arialbi]
+\setmonofont{Consolas}[
+  Path=C:/Windows/Fonts/, Extension=.ttf,
+  UprightFont=consola, BoldFont=consolab,
+  ItalicFont=consolai, BoldItalicFont=consolaz]
+\newfontfamily\codehan{Microsoft YaHei}
+
+% -----------------------------------------------------------------------------
+%  颜色（Packt 单色：正文近黑，代码/次要灰）
+% -----------------------------------------------------------------------------
+\definecolor{ink}{HTML}{1A1A1A}          % 正文墨色（近黑，非纯黑）
+\definecolor{headcol}{HTML}{000000}      % 标题（原书黑色）
+\definecolor{codegray}{HTML}{444444}     % 行内代码灰
+\definecolor{rulecol}{HTML}{000000}      % 页眉细线
+
+\setlength{\parindent}{0bp}              % Packt 正文不缩进，段间留白
+\setlength{\parskip}{5.6bp}              % 原书段落间距实测 ~5.7bp
+\raggedbottom
+
+\emergencystretch=1em
+
+\AtBeginDocument{\color{ink}}
+
+\setlist[itemize,enumerate,description]{nosep, topsep=4bp, partopsep=0bp, parsep=0bp, leftmargin=2em}
+
+% -----------------------------------------------------------------------------
+%  代码高亮：minted（需 Pygments + xelatex -shell-escape）
+%  原书代码块无外框/底色/行号，左缩进，强调行加粗
+% -----------------------------------------------------------------------------
+\usepackage[cache=true]{minted}
+\newcommand{\codefont}{\fontsize{9bp}{11.4bp}\selectfont}
+\setminted{obeytabs, tabsize=2, breaklines=true, breakanywhere=true,
+           fontsize=\codefont, autogobble=true}
+
+% 【关键】minted v3 在 Windows 下缓存目录必须是绝对路径（照搬模板做法）
+\makeatletter
+\CatchFileDef{\mintedProjectRoot}{|"kpsewhich --var-value TEXMF_OUTPUT_DIRECTORY"}%
+  {\minted@standardcatcodes\endlinechar=-1}%
+\def\minted@stripcr#1\r{#1}%
+\edef\mintedProjectRoot{\expandafter\minted@stripcr\mintedProjectRoot\r}%
+\ifx\mintedProjectRoot\@empty
+  \CatchFileDef{\mintedProjectRoot}{|"kpsewhich --var-value TEXMFOUTPUT"}%
+    {\minted@standardcatcodes\endlinechar=-1}%
+  \edef\mintedProjectRoot{\expandafter\minted@stripcr\mintedProjectRoot\r}%
+\fi
+\ifx\mintedProjectRoot\@empty
+  \PackageWarning{minted-cn}{Cannot determine project root...}%
+\else
+  \edef\minted@cachedir{\mintedProjectRoot}%
+  \typeout{minted-cn: cachedir = \minted@cachedir}%
+\fi
+\makeatother
+
+\makeatletter
+\CatchFileDef{\minted@styledef@manning}{book/manning-pygments-style.tex}%
+  {\minted@standardcatcodes\endlinechar=-1}%
+\minted@detectconfig
+\makeatother
+\setminted{style=manning}
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{breakable, minted, skins}
+
+% 无框代码块：左缩进由 \codeInset 控制（原书多数章节 63bp；第 3–5 章 18bp）
+\newcommand{\codeInset}{63bp}
+\newtcblisting{codebox}{
+  listing engine=minted, minted language=c++, listing only,
+  size=minimal, arc=0bp, breakable, enhanced jigsaw,
+  colframe=white, colback=white, boxrule=0bp,
+  left=\codeInset, right=0bp, top=0bp, bottom=0bp, boxsep=0bp,
+  before skip=9.4bp, after skip=9.7bp,
+  minted options={fontsize=\codefont, tabsize=2, obeytabs=true,
+                  breaklines=true, breakanywhere=true, autogobble=true},
+}
+% 带标题代码块（原书其实无标题条；此环境保留以备个别需要标注文件名处）
+\newtcblisting{codeboxt}[1]{
+  listing engine=minted, minted language=c++, listing only,
+  size=title, arc=0bp, breakable, enhanced jigsaw,
+  colframe=white, colback=white, boxrule=0bp,
+  left=15bp, right=0bp, top=2bp, bottom=2bp, boxsep=0bp,
+  lefttitle=12bp, righttitle=2bp, toptitle=2bp, bottomtitle=2bp,
+  title={#1},
+  colbacktitle=white, coltitle=ink,
+  fonttitle=\sffamily\fontsize{9bp}{11bp}\selectfont,
+  before skip=8bp, after skip=8bp,
+  minted options={fontsize=\codefont, tabsize=2, obeytabs=true,
+                  breaklines=true, breakanywhere=true, autogobble=true},
+}
+
+% -----------------------------------------------------------------------------
+%  Note / Tip 提示块（原书实测版式，pdf 17/28/65/171/179/318）
+%    图标 41.5×41.5bp 灰色圆（i / TIP），图片左缘 x=71.3（正文左缘 +14.6bp）；
+%    正文整块缩进 65.4bp（自 x=56.7 到 x=122.1），无加粗标题行、无底色盒子。
+%  图标纵向位置（实测反推的原始版式规则）：
+%    图标上缘 = 块顶 + max(3.6bp, (块高 − 41.5bp)/2)
+%    等价为：图标上缘相对首行基线 delta = max(−5.8bp, (块高 −41.5bp)/2 −10bp)
+%    短块（1–2 行）图标上缘在首行基线上方 5.8bp；6 行块图标在块内基本居中（误差 <0.7bp）。
+% -----------------------------------------------------------------------------
+% \myNotic{图标文件名}{正文}，图标文件名如 p017_i00（i）/ p017_i01（TIP）
+% 纵向规则（原书实测反推）：
+%   多行块（>2 行）：图标与正文块的垂直中心对齐；
+%   短块（≤2 行）：图标上缘固定在首行基线上方 5.8bp（与原书 pdf 17 一致）。
+% 用 \smash 把图标包成“零高零深”，避免撑高行盒、破坏段间距。
+\newdimen\noticHT
+\newdimen\noticR\newdimen\noticPad
+\newbox\noticBox
+\newenvironment{myNotic}[2]{%
+  \par\addvspace{4.6bp}%
+  \setbox\noticBox\vbox{\hsize=\dimexpr\textwidth-65.4bp\relax
+    \parindent 0bp \parskip 0bp \raggedright \noindent #2\par}%
+  \noticHT=\ht\noticBox \advance\noticHT by \dp\noticBox
+  % 图标纵向定位（实测标定：图标上缘 ≈ 首行上缘 +2.0bp，如原书 pdf 17/65/171/179）
+  %   短块（≤2 行）：R = −34.2bp
+  %   多行块：图标与正文块垂直居中，中心略高 1.6bp（原书 pdf 28/318）→ R = −块高/2 − 10.6bp
+  \ifdim \noticHT > 28bp
+    \noticR=-\noticHT
+    \divide\noticR by 2
+    \advance\noticR by -10.6bp
+  \else
+    \noticR=-34.2bp
+  \fi
+  \noindent\hangindent 65.4bp\hangafter 1\relax
+  \rlap{\hskip 14.6bp\smash{\raisebox{\noticR}{\includegraphics[width=41.5bp,height=41.5bp]{images/#1.png}}}}%
+  \hspace*{65.4bp}%
+  \parindent 0bp\parskip 0bp\relax
+  #2\par
+  % 图标高于正文块时块后补足（原书 pdf 17 实测：两相邻提示块正文上缘间距 59.4bp）
+  \noticPad=41.5bp \advance\noticPad by -\noticHT \advance\noticPad by 5.3bp
+  \ifdim\noticPad<0bp \noticPad=0bp \fi
+  \vspace{\noticPad}\par\addvspace{4.6bp}}
+
+% 补丁：minted v3 × tcolorbox × subfiles 路径冲突（照搬模板）
+\makeatletter
+\def\minted@define@inputfilepath#1{%
+  \IfPackageLoadedTF{import}%
+   {\IfFileExists{\import@path#1}%
+     {\edef\minted@inputfilepath{\import@path#1}}%
+     {\edef\minted@inputfilepath{#1}}}%
+   {\edef\minted@inputfilepath{#1}}}
+\makeatother
+
+% -----------------------------------------------------------------------------
+%  图表
+% -----------------------------------------------------------------------------
+\newif\ifmyGraphicCapCenter
+\myGraphicCapCenterfalse
+\newif\ifmyGraphicCapBold
+\myGraphicCapBoldfalse            % Packt 图注不加粗
+\ExplSyntaxOn
+\NewDocumentCommand { \myGraphic } { mmm }
+{
+  \par\medskip\noindent
+  \begin{center}
+    \includegraphics[width=#1\textwidth,height=0.82\textheight,keepaspectratio]{#2}
+  \end{center}
+  \nopagebreak\vspace{3bp}\noindent
+  {\fontsize{8bp}{10.5bp}\selectfont
+   \ifmyGraphicCapBold\bfseries\fi
+   \ifmyGraphicCapCenter
+     \parbox{\textwidth}{\centering #3}%
+   \else
+     \parbox{\textwidth}{#3}%
+   \fi}\par
+  \medskip
+}
+\ExplSyntaxOff
+\captionsetup[figure]{labelformat=empty}
+\captionsetup[table]{labelformat=empty}
+
+% -----------------------------------------------------------------------------
+%  标题样式（Packt：粗体无衬线、不编号；黑色）
+% -----------------------------------------------------------------------------
+\usepackage{titlesec}
+\titleformat{\section}
+  {\sffamily\bfseries\fontsize{20bp}{24bp}\selectfont\color{headcol}}{}{0pt}{}
+\titlespacing*{\section}{0pt}{20.9bp}{-4.5bp}
+\titleformat{\subsection}
+  {\sffamily\bfseries\fontsize{18bp}{22bp}\selectfont\color{headcol}}{}{0pt}{}
+\titlespacing*{\subsection}{0pt}{16.6bp}{-4.4bp}
+\titleformat{\subsubsection}
+  {\sffamily\bfseries\fontsize{16bp}{20bp}\selectfont\color{headcol}}{}{0pt}{}
+\titlespacing*{\subsubsection}{0pt}{10bp}{4bp}
+
+\setcounter{secnumdepth}{0}     % 不显示节号（对齐原书）
+\setcounter{tocdepth}{2}        % 目录含章/节/小节（原书目录为三级）
+
+% -----------------------------------------------------------------------------
+%  目录 / 书签 / 超链接
+% -----------------------------------------------------------------------------
+\usepackage{url}
+\usepackage[depth=3]{bookmark}
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=black,
+  filecolor=black!35!blue,
+  urlcolor=black!35!blue,
+  breaklinks=true,
+  pdfstartview=Fit,
+  pdftitle={C++17 边做边学},
+  pdfauthor={Stefan Bjornander},
+  pdfsubject={C++17 By Example 中文版},
+  pdfkeywords={C++, C++17, Qt, DSL},
+}
+\renewcommand{\contentsname}{目录}
+
+% 目录条目：三级（章粗体 / 节粗体缩进 / 小节常规缩进），无引导点，页码右对齐
+\makeatletter
+% 原书目录实测：章条 x=59.6 粗体 12；节条 x=77.6 粗体 12；小节条 x=95.6 常规 11；
+% 页码右缘 x=481.8；条距 章 4.2bp / 节 1.2bp / 小节 1.0bp（正文 parskip 置零）
+\renewcommand*\l@chapter[2]{%
+  \ifnum \c@tocdepth >\m@ne
+    \addpenalty{-\@highpenalty}%
+    \parskip\z@
+    \vskip 4.2bp \@plus\p@
+    \begingroup
+      \leavevmode \bfseries\sffamily\fontsize{12bp}{14bp}\selectfont
+      \leftskip 2.9bp\relax
+      #1\nobreak\hfill\nobreak\hb@xt@\@pnumwidth{\hss #2\hspace*{2.9bp}}\par
+      \penalty\@highpenalty
+    \endgroup
+  \fi}
+\renewcommand*\l@section[2]{%
+  \ifnum \c@tocdepth >\z@
+    \parskip\z@
+    \vskip 1.2bp \@plus\p@
+    \begingroup
+      \leavevmode \bfseries\sffamily\fontsize{12bp}{14bp}\selectfont
+      \leftskip 20.9bp\relax
+      #1\nobreak\hfill\nobreak\hb@xt@\@pnumwidth{\hss #2\hspace*{2.9bp}}\par
+    \endgroup
+  \fi}
+\renewcommand*\l@subsection[2]{%
+  \ifnum \c@tocdepth >\z@
+    \parskip\z@
+    \vskip 1.0bp \@plus\p@
+    \begingroup
+      \leavevmode \sffamily\fontsize{11bp}{13bp}\selectfont
+      \leftskip 38.9bp\relax
+      #1\nobreak\hfill\nobreak\hb@xt@\@pnumwidth{\hss #2\hspace*{2.9bp}}\par
+    \endgroup
+  \fi}
+% 前置/后置页条目下方的整宽细线（原书 Preface / 书末 / 索引条下各一条）
+\newcommand{\tocentryrule}{%
+  \par\vspace*{-10.3bp}\noindent\rule{\textwidth}{0.4pt}\par\vspace{-1.7bp}}
+
+% 自定义 \tableofcontents：右对齐“目录”标题（基线 104.9）+ 首页无页眉
+% 原书首页：标题 baseline 104.9，首条 Preface baseline 149.5（其下 151.9 处整宽细线）
+\renewcommand{\tableofcontents}{%
+  \clearpage
+  \pagenumbering{roman}%
+  \thispagestyle{empty}%
+  \vspace*{-23.3bp}%
+  \begin{flushright}
+    {\sffamily\fontsize{30bp}{34bp}\selectfont\contentsname}
+  \end{flushright}
+  \vspace{15.5bp}%
+  \markboth{}{\contentsname}%  目录续页页眉：右侧“目录”（与原书一致）
+  \@starttoc{toc}%
+}
+\makeatother
+
+% -----------------------------------------------------------------------------
+%  长串断行（URL / 行内长标识符允许折行，不补连字符）
+% -----------------------------------------------------------------------------
+\ExplSyntaxOn
+\let\myORIhref\href
+\let\myORItt\texttt
+\cs_new:Npn \my_spcmark {}
+\tl_new:N \l_myin_tl
+\tl_new:N \l_myout_tl
+\cs_new_protected:Npn \my_breakinject:n #1
+  {
+    \tl_set:Nn \l_myin_tl { #1 }
+    \tl_replace_all:Nnn \l_myin_tl { ~ } { \my_spcmark }
+    \tl_clear:N \l_myout_tl
+    \tl_map_inline:Nn \l_myin_tl
+      { \tl_put_right:Nn \l_myout_tl { ##1 \penalty 1000 \scan_stop: } }
+    \tl_replace_all:Nnn \l_myout_tl { / \penalty 1000 \scan_stop: } { / \penalty 0 \scan_stop: }
+    \tl_replace_all:Nnn \l_myout_tl { . \penalty 1000 \scan_stop: } { . \penalty 0 \scan_stop: }
+    \tl_replace_all:Nnn \l_myout_tl { - \penalty 1000 \scan_stop: } { - \penalty 0 \scan_stop: }
+    \tl_replace_all:Nnn \l_myout_tl { ? \penalty 1000 \scan_stop: } { ? \penalty 0 \scan_stop: }
+    \tl_replace_all:Nnn \l_myout_tl { = \penalty 1000 \scan_stop: } { = \penalty 0 \scan_stop: }
+    \tl_replace_all:Nnn \l_myout_tl { \_ \penalty 1000 \scan_stop: } { \_ \penalty 0 \scan_stop: }
+    \tl_replace_all:Nnn \l_myout_tl { \my_spcmark } { ~ }
+  }
+% 行内代码着灰色
+\RenewDocumentCommand { \href } { m m }
+  { \my_breakinject:n { #2 } \myORIhref { #1 } { \l_myout_tl } }
+\RenewDocumentCommand { \texttt } { m }
+  { \my_breakinject:n { #1 } \textcolor{codegray}{\myORItt { \l_myout_tl }} }
+\ExplSyntaxOff
+
+% -----------------------------------------------------------------------------
+%  页眉页脚（Packt：左斜体章名 + 右 “Chapter N” + 细线；
+%            页脚 页码两侧各有细线，页码 12bp 加粗居中）
+% -----------------------------------------------------------------------------
+\makeatletter
+\renewcommand*\@pnumwidth{2.2em}
+\renewcommand*\@tocrmarg{2.2em}
+\makeatother
+
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{rulecol}\leaders\hrule height 0.4pt\hfill}}
+\renewcommand{\footrulewidth}{0pt}
+% 页脚：页码居中、两侧各一段细线（与原书一致，线穿过页码中线）
+\newcommand{\myfoot}[1]{%
+  \leavevmode\hbox to\headwidth{%
+    \color{rulecol}%
+    \rule[3.6bp]{192.6bp}{0.4pt}%
+    \hskip 11.4bp
+    \hbox to 20bp{\hss\color{ink}\fontsize{12bp}{14bp}\selectfont\bfseries #1\hss}%
+    \hskip 11.4bp
+    \rule[3.6bp]{192.6bp}{0.4pt}%
+  }}
+\fancyhead[L]{\raisebox{-7.1bp}[0bp][0bp]{\itshape\color{ink}\fontsize{10bp}{12bp}\selectfont\leftmark}}
+\fancyhead[R]{\raisebox{-7.1bp}[0bp][0bp]{\itshape\color{ink}\fontsize{10bp}{12bp}\selectfont\rightmark}}
+\fancyfoot[C]{\myfoot{[~\thepage~]}}
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \fancyhead[L]{\raisebox{-7.1bp}[0bp][0bp]{\itshape\color{ink}\fontsize{10bp}{12bp}\selectfont\leftmark}}%
+  \fancyhead[R]{\raisebox{-7.1bp}[0bp][0bp]{\itshape\color{ink}\fontsize{10bp}{12bp}\selectfont\rightmark}}%
+  \renewcommand{\headrulewidth}{0.4pt}%
+  \fancyfoot[C]{\myfoot{[~\thepage~]}}}
+
+% 章节命令（Packt 版式：右侧 100bp 章号 + 30bp 章名，无页眉页脚）
+\ExplSyntaxOn
+% 编号正文章节：\myChapter{章号}{标题}{文件}
+\NewDocumentCommand { \myChapter } { mmm }
+{
+  \clearpage
+  \setcounter{chapter}{#1}
+  \setcounter{section}{0}
+  \setcounter{subsection}{0}
+  \thispagestyle{empty}
+  \vspace*{-6.9bp}
+  \begin{flushright}
+    {\rmfamily\fontsize{100bp}{100bp}\selectfont #1}\par
+    \vspace{4bp}
+    {\sffamily\fontsize{30bp}{34bp}\selectfont #2}
+  \end{flushright}
+  \vspace{42bp}
+  \markboth{#2}{Chapter~#1}
+  \addcontentsline{toc}{chapter}{Chapter~#1:\ \ #2}
+  \subfile{#3}
+}
+% 前言类：进目录但无编号（右对齐 30bp 标题，首页无页眉页脚）
+% 标题基线 = 104.9bp（原书实测）：用 \vspace* 拉到 (104.9 - 32bp) 的顶端位置
+\NewDocumentCommand { \myFront } { mm }
+{
+  \clearpage
+  \thispagestyle{empty}
+  \vspace*{-24.1bp}
+  \begin{flushright}
+    {\sffamily\fontsize{30bp}{34bp}\selectfont #1}
+  \end{flushright}
+  \vspace{30bp}
+  \markboth{#1}{}
+  \addcontentsline{toc}{chapter}{#1}
+  \addtocontents{toc}{\protect\tocentryrule}%  前置/后置页条目下方的整宽细线
+  \subfile{#2}
+}
+% 扉页/版权类：不进目录
+\NewDocumentCommand { \myFrontNoToc } { m }
+{
+  \clearpage
+  \markboth{}{}
+  \subfile{#1}
+}
+\ExplSyntaxOff
+
+% 节标题不改动页眉标记（保持右栏恒为 “Chapter N”）
+\renewcommand{\sectionmark}[1]{}
+
+% -----------------------------------------------------------------------------
+%  Unicode 符号兜底
+% -----------------------------------------------------------------------------
+\usepackage{newunicodechar}
+\newunicodechar{→}{\(\to\)}
+\newunicodechar{✓}{\(\checkmark\)}
+\newunicodechar{ϵ}{\(\epsilon\)}
+\newunicodechar{│}{\(|\)}
+\newunicodechar{▶}{\(\triangleright\)}
+\newunicodechar{·}{\(\cdot\)}
+
+% 索引支持（两栏，粗体字母头 16.2bp，词条 Arial 9bp，页码 FreeMono 9bp）
+% 原书实测：字母头 baseline→首条 13.5bp；条目行距 11.5bp；子条目缩进 7.5bp
+\newfontfamily\idxnumfont[
+  Path=D:/ProgramData/texlive/2026/texmf-dist/fonts/opentype/public/gnu-freefont/,
+  Extension=.otf, UprightFont=FreeMono,
+  BoldFont=FreeMonoBold, ItalicFont=FreeMonoOblique]{FreeMono}
+% 字母头（原书实测：上一组末条 → 字母头 23.4bp；字母头 → 本组首条 13.5bp）
+\newcommand{\idxletter}[1]{%
+  \par\vspace{9.6bp}\noindent
+  {\sffamily\bfseries\fontsize{16.2bp}{16.2bp}\selectfont #1}\par\vspace{2.0bp}}% 折行续行缩进（原书实测：条目首行 x=56.7，续行 x=70.2 即悬挂缩进 13.5bp）
+\newcommand{\idxitem}[2]{%
+  {\par\noindent\hangindent 13.5bp\hangafter 1\relax
+   \sffamily\fontsize{9bp}{11.5bp}\selectfont #1\hskip 4bp
+   {\idxnumfont #2}\par}}
+\newcommand{\idxsub}[2]{%
+  {\par\noindent\hangindent 13.5bp\hangafter 1\relax\hskip 7.5bp
+   \sffamily\fontsize{9bp}{11.5bp}\selectfont #1\hskip 4bp
+   {\idxnumfont #2}\par}}
+\newenvironment{myindex}
+  {\par\parindent 0bp\relax\parskip 0bp\relax\frenchspacing
+   \begin{multicols}{2}\setlength{\columnsep}{14.2bp}
+   \parindent 0bp\relax\parskip 0bp\relax}
+  {\end{multicols}}
